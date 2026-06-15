@@ -1,0 +1,33 @@
+.env
+.env.local
+*.pyc
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+node_modules/
+dist/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/playwright/.cache/
+*.egg-info/
+.DS_Store
+.idea/
+.vscode/
+
+# Catalog with real data (user-provided MOSS output)
+catalog/catalog.json
+catalog/logs/
+
+# Pipeline temp audio
+pipeline/data/previews/
+pipeline/data/tmp/
+*.mp3
+*.wav
+
+# Docker volumes
+postgres_data/
