@@ -12,7 +12,8 @@
  * (stessa traccia, nuovo `start_ms`); non ricalcola il pool prefetch.
  */
 
-import type { MatchResponse, PrefetchCandidate, PrefetchResponse } from "./api";
+import type { MatchResponse, PrefetchCandidate, PrefetchResponse, TrackTimeline } from "./api";
+import { segmentAtTime } from "./segments";
 import { nearestEmotionZone } from "./emotions";
 import { matchResponseFromPrefetchCandidate } from "./penultimateHandoff";
 
@@ -43,4 +44,30 @@ export function buildMatchFromPrefetch(
   bpmFrom: number,
 ): MatchResponse {
   return matchResponseFromPrefetchCandidate(candidate, bpmFrom);
+}
+
+/** Prefetch match replayed from the matches panel at a motion-synced entry point. */
+export function buildMatchFromPrefetchAtEntry(
+  candidate: PrefetchCandidate,
+  entryMs: number,
+  bpmFrom: number,
+  segments?: TrackTimeline["segments"],
+): MatchResponse {
+  const match = matchResponseFromPrefetchCandidate(
+    { ...candidate, audio_start_ms: entryMs },
+    bpmFrom,
+  );
+  const seg = segments?.length ? segmentAtTime(segments, entryMs) : null;
+  if (seg) {
+    match.start_ms = entryMs;
+    match.segment = {
+      t_start: entryMs,
+      t_end: seg.t_end,
+      v: seg.v,
+      ar: seg.ar,
+      label: seg.label,
+      emotion_label: seg.emotion_label,
+    };
+  }
+  return match;
 }

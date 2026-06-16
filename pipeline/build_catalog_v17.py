@@ -36,7 +36,6 @@ STRIP_JAMENDO_KEYS = frozenset({"local_audio_path"})
 STRIP_CATALOG_KEYS = frozenset(
     {
         "embedding_model",
-        "embedding_profile",
     }
 )
 

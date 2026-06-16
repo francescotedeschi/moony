@@ -23,9 +23,10 @@ import {
   trackAudioUrl,
   type TrackTimeline,
 } from "./lib/api";
-import { EMOTION_ZONES, formatCatalogMood, nearestEmotionZone } from "./lib/emotions";
+import { EMOTION_ZONES, formatCatalogMood, nearestEmotionZone, pickRandomSessionSeedTarget } from "./lib/emotions";
 import {
   buildMatchFromPrefetch,
+  buildMatchFromPrefetchAtEntry,
   pickPrefetchForPadTarget,
   type TrackChangeReason,
 } from "./lib/trackNavigation";
@@ -51,6 +52,7 @@ import { seedCatalogYoutubeGain } from "./lib/analyzeTrackLoudness";
 import { useAudioEngine } from "./hooks/useAudioEngine";
 import { useTrackLyrics } from "./hooks/useTrackLyrics";
 import { usePadLyricsDisplay } from "./hooks/usePadLyricsDisplay";
+import { hasSyncedLyrics } from "./lib/lyricsSync";
 import {
   prefetchLyricsFromPrefetchResponse,
 } from "./lib/lyricsCache";
@@ -68,8 +70,6 @@ const TARGET_MOOD_PREFETCH_POLL_MS = 5_000;
 const TARGET_ZONE_NO_MATCH_NOTE_MS = 5_000;
 /** Block last-segment handoff until timeline + playhead match the new track. */
 const TRACK_HANDOFF_SETTLE_MS = 3_000;
-/** Pad target for the first track of each browser session (Joy zone). */
-const JOY_SESSION_TARGET = { v: 0.8, ar: 0.6 };
 
 function syncedTimelineForTrack(
   trackId: string,
@@ -254,20 +254,28 @@ export default function App() {
   );
   const trackLyrics = useTrackLyrics(
     nowPlaying?.track_id,
-    lyricsMode === "musixmatch" && Boolean(nowPlaying?.musixmatch),
+    lyricsMode === "musixmatch" && Boolean(nowPlaying?.track_id),
   );
   const padLyrics = usePadLyricsDisplay(nowPlaying, trackLyrics, lyricsMode);
+  const padLyricsReadyForTrack = Boolean(
+    nowPlaying &&
+      !trackLyrics.loading &&
+      trackLyrics.lines.length > 0 &&
+      hasSyncedLyrics(trackLyrics.source, trackLyrics.lines),
+  );
   const padLyricsSyncPlayback = Boolean(
     padLyrics &&
       nowPlaying &&
       padLyrics.trackId === nowPlaying.track_id &&
-      !trackLyrics.loading &&
-      trackLyrics.lines.length > 0,
+      padLyricsReadyForTrack &&
+      !audio.isCrossfading,
   );
   const padRef = useRef<EmotionPadHandle>(null);
   const dragRef = useRef(false);
   /** Track IDs already started this browser session — each song at most once. */
   const playedTrackIdsRef = useRef<Set<string>>(new Set());
+  /** Opener mood (Calm / Joy / Energy) — fixed for this page load. */
+  const sessionSeedTargetRef = useRef(pickRandomSessionSeedTarget());
   const positionRef = useRef(position);
   const targetRef = useRef(position);
   const directionRef = useRef(direction);
@@ -614,7 +622,7 @@ export default function App() {
 
         prefetchLyricsIfEnabled(
           result,
-          track.musixmatch ? [track.track_id] : [],
+          lyricsModeRef.current === "musixmatch" ? [track.track_id] : [],
           signal,
         );
 
@@ -793,6 +801,9 @@ export default function App() {
         const plan = crossfadeFromMatch(match, exit);
         const onStart = () => {
           audio.alignPlaybackClock(match.start_ms);
+          trackEntryMsRef.current = match.start_ms;
+          nowPlayingRef.current = match;
+          setNowPlaying(match);
           opts?.onTransitionStart?.();
         };
         const normGain = match.youtube_playback_gain;
@@ -920,7 +931,7 @@ export default function App() {
         audio.alignPlaybackClock(match.start_ms);
         prefetchLyricsIfEnabled(
           { intents: prefetchRef.current ?? {} },
-          match.musixmatch ? [match.track_id] : [],
+          lyricsModeRef.current === "musixmatch" ? [match.track_id] : [],
         );
         return true;
       } catch (e) {
@@ -958,7 +969,7 @@ export default function App() {
 
       padRef.current?.lockFilledToIntent();
       const sessionSeed = opts?.sessionSeed ?? false;
-      const target = sessionSeed ? JOY_SESSION_TARGET : padMatchPosition();
+      const target = sessionSeed ? sessionSeedTargetRef.current : padMatchPosition();
       targetRef.current = target;
       if (sessionSeed) {
         setPosition(target);
@@ -1050,13 +1061,23 @@ export default function App() {
       candidate: PrefetchCandidate,
       opts?: {
         expectLeaveTrackId?: string;
+        entryMs?: number;
+        segments?: TrackTimeline["segments"];
       },
     ): Promise<boolean> => {
       if (switchingTrackRef.current) return false;
       if (matchingRef.current && !trackChangeInFlightRef.current) return false;
 
       const bpmFrom = nowPlayingRef.current?.bpm ?? candidate.bpm;
-      const match = buildMatchFromPrefetch(candidate, bpmFrom);
+      const match =
+        opts?.entryMs != null
+          ? buildMatchFromPrefetchAtEntry(
+              candidate,
+              opts.entryMs,
+              bpmFrom,
+              opts.segments,
+            )
+          : buildMatchFromPrefetch(candidate, bpmFrom);
       const beforeTrackId = nowPlayingRef.current?.track_id;
       const beforeStartMs = nowPlayingRef.current?.start_ms;
       setSwitchingTrack(true);
@@ -1158,9 +1179,9 @@ export default function App() {
       const intents = prefetchRef.current;
       const candidate = intents ? findPrefetchCandidate(intents, trackId) : undefined;
       if (candidate) {
-        const played = await playPrefetchCandidate({
-          ...candidate,
-          audio_start_ms: entryMs,
+        const played = await playPrefetchCandidate(candidate, {
+          entryMs,
+          segments: row?.segments,
         });
         if (played || nowPlayingRef.current?.track_id === trackId) {
           schedulePrefetchAfterTimelineReplay(trackId, entryMs);
@@ -1192,6 +1213,7 @@ export default function App() {
             label: seg.label,
             emotion_label: seg.emotion_label,
           },
+          musixmatch: timeline.musixmatch ?? candidate?.musixmatch ?? undefined,
           bpm_from: playing?.bpm ?? timeline.bpm,
           bpm_to: timeline.bpm,
         };
@@ -1308,6 +1330,7 @@ export default function App() {
       try {
         audio.ensureContext();
         await audio.seekToMs(seg.t_start);
+        audio.alignPlaybackClock(seg.t_start);
         playbackMsRef.current = seg.t_start;
         lastSegmentIdxRef.current = segIdx;
 
@@ -1976,7 +1999,7 @@ export default function App() {
                 variant="pad"
                 trackId={padLyrics.trackId}
                 lines={padLyrics.lines}
-                playbackStore={audio.playbackStore}
+                playbackStore={audio.lyricsPlaybackStore}
                 entryMs={padLyrics.entryMs}
                 pixelUrl={padLyrics.pixelUrl}
                 source={padLyrics.source}

@@ -202,11 +202,14 @@ export function useAudioEngine() {
   const peakMeterBufferRef = useRef<Float32Array | null>(null);
   const graphsRef = useRef<Partial<Record<Bus, BusGraph>>>({});
   const playbackStoreRef = useRef(createPlaybackStore());
+  /** Incoming bus time during crossfade — keeps pad lyrics on the new track clock. */
+  const lyricsPlaybackStoreRef = useRef(createPlaybackStore());
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolumeState] = useState(1);
   const [muted, setMutedState] = useState(false);
   const [hasTrack, setHasTrack] = useState(false);
+  const [isCrossfading, setIsCrossfading] = useState(false);
   const [playbackMs, setPlaybackMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
 
@@ -277,9 +280,13 @@ export function useAudioEngine() {
 
   const readPlaybackMs = useCallback((): number => {
     if (crossfadeActiveRef.current) {
+      const outEl = getBus(activeRef.current);
+      if (outEl && Number.isFinite(outEl.currentTime) && !isAudioAtEnd(outEl)) {
+        return Math.round(outEl.currentTime * 1000);
+      }
       const inBus: Bus = activeRef.current === "A" ? "B" : "A";
       const incoming = getBus(inBus);
-      if (incoming && !incoming.paused && Number.isFinite(incoming.currentTime)) {
+      if (incoming && Number.isFinite(incoming.currentTime)) {
         return Math.round(incoming.currentTime * 1000);
       }
     }
@@ -300,9 +307,21 @@ export function useAudioEngine() {
     return playbackStoreRef.current.getSnapshot();
   }, []);
 
+  const readLyricsPlaybackMs = useCallback((): number => {
+    if (crossfadeActiveRef.current) {
+      const inBus: Bus = activeRef.current === "A" ? "B" : "A";
+      const incoming = getBus(inBus);
+      if (incoming && Number.isFinite(incoming.currentTime)) {
+        return Math.round(incoming.currentTime * 1000);
+      }
+    }
+    return readPlaybackMs();
+  }, [readPlaybackMs]);
+
   const syncPlaybackClock = useCallback(() => {
     const ms = readPlaybackMs();
     playbackStoreRef.current.setSnapshot(ms);
+    lyricsPlaybackStoreRef.current.setSnapshot(readLyricsPlaybackMs());
     setPlaybackMs(ms);
     const el = getBus(activeRef.current);
     if (!el) return;
@@ -313,11 +332,12 @@ export function useAudioEngine() {
     if (ctx?.state === "suspended") {
       void ctx.resume();
     }
-  }, [readPlaybackMs]);
+  }, [readPlaybackMs, readLyricsPlaybackMs]);
 
   const alignPlaybackClock = useCallback(
     (ms: number) => {
       playbackStoreRef.current.forceSnapshot(ms);
+      lyricsPlaybackStoreRef.current.forceSnapshot(ms);
       setPlaybackMs(ms);
     },
     [],
@@ -578,6 +598,7 @@ export function useAudioEngine() {
   const bumpPlaybackGeneration = useCallback(() => {
     stopCrossfadeLoop();
     crossfadeActiveRef.current = false;
+    setIsCrossfading(false);
     playEpochRef.current += 1;
   }, [stopCrossfadeLoop]);
 
@@ -643,8 +664,9 @@ export function useAudioEngine() {
       setHasTrack(true);
       setIsPlaying(true);
       onPlayStart?.();
+      syncPlaybackClock();
     },
-    [ensureAudioGraph, ensureElements, prepareOnBus, resumeAudioContext, setBusGain],
+    [ensureAudioGraph, ensureElements, prepareOnBus, resumeAudioContext, setBusGain, syncPlaybackClock],
   );
 
   const crossfadeTo = useCallback(
@@ -658,6 +680,7 @@ export function useAudioEngine() {
       bumpPlaybackGeneration();
       const epoch = playEpochRef.current;
       crossfadeActiveRef.current = true;
+      setIsCrossfading(true);
       ensureElements();
       ensureAudioGraph();
       await resumeAudioContext();
@@ -769,6 +792,7 @@ export function useAudioEngine() {
       } finally {
         if (epoch === playEpochRef.current) {
           crossfadeActiveRef.current = false;
+          setIsCrossfading(false);
         }
       }
     },
@@ -865,8 +889,10 @@ export function useAudioEngine() {
     setOnTrackEnded,
     isPlaying,
     hasTrack,
+    isCrossfading,
     playbackMs,
     playbackStore: playbackStoreRef.current as PlaybackStore,
+    lyricsPlaybackStore: lyricsPlaybackStoreRef.current as PlaybackStore,
     durationMs,
     volume,
     muted,

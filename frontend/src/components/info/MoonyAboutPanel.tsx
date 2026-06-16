@@ -103,7 +103,7 @@ function TrackToMapVisual() {
           </span>
         ))}
       </div>
-      <p className="about-map-caption">Track → Segments → Emotional Map</p>
+      <p className="about-map-caption">Track → Sections → Emotional Map</p>
     </div>
   );
 }
@@ -235,7 +235,7 @@ export function MoonyAboutPanel({ open, onClose, onExploreApi }: Props) {
 
         <AboutSection
           id="about-approach"
-          title="Segment-Level Intelligence"
+          title="Section-Level Intelligence"
           subtitle="Not a player—the brain behind adaptive listening."
           visual={<TrackToMapVisual />}
         >
@@ -253,19 +253,19 @@ export function MoonyAboutPanel({ open, onClose, onExploreApi }: Props) {
         <AboutSection
           id="about-how"
           title="How It Works"
-          subtitle="Multi-layer analysis, segment-level search."
+          subtitle="Multi-layer analysis, section-level search."
           visual={<AboutSegmentSearchVisual />}
         >
           <p>Every segment gets a rich emotional profile from three complementary layers:</p>
           <ul className="about-list">
             <li>
-              <strong>Musixmatch</strong> — structure, segment lyrics, and word-level timing
+              <strong>Musixmatch</strong> — section lyrics and word-level timing
             </li>
             <li>
-              <strong>Essentia</strong> — BPM, energy, rhythm, and dynamics
+              <strong>Cyanite</strong> — BPM, valence, arousal, mood labels, and energy curve
             </li>
             <li>
-              <strong>MOSS-Music</strong> — semantic meaning, emotional intention, and performance
+              <strong>MOSS-Music</strong> — section identification, semantic meaning, and performance
             </li>
           </ul>
           <p>
@@ -305,7 +305,7 @@ export function MoonyAboutPanel({ open, onClose, onExploreApi }: Props) {
             It is the emotional intelligence API that turns existing catalogs into adaptive
             experiences—fast to integrate, catalog-agnostic.
           </p>
-          <p className="about-trust-strip">Powered by MOSS-Music · Musixmatch · Essentia</p>
+          <p className="about-trust-strip">Powered by MOSS-Music · Musixmatch · Cyanite</p>
           <div className="about-hero-ctas about-closing-ctas">
             <button type="button" className="about-cta about-cta--accent" onClick={onClose}>
               Start listening
