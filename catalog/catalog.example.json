@@ -1,0 +1,58 @@
+{
+  "tracks": [
+    {
+      "id": "jamendo_example_1",
+      "title": "Morning Light",
+      "artist": "Example Artist",
+      "bpm": 72,
+      "audio_url": "https://mp3l.jamendo.com/?trackid=example",
+      "jamendo_tags": ["calm", "melancholic"],
+      "musixmatch": {
+        "commontrack_id": "12345678",
+        "track_id": "274345545",
+        "has_subtitles": 1,
+        "has_lyrics": 1
+      },
+      "beat_grid": {
+        "offset_ms": 120,
+        "bar_ms": 2000
+      },
+      "segments": [
+        { "t_start": 0, "t_end": 45000, "v": 0.7, "ar": -0.6, "label": "intro", "bar_count": 8 },
+        { "t_start": 45000, "t_end": 90000, "v": 0.5, "ar": 0.1, "label": "verse", "bar_count": 8 },
+        { "t_start": 90000, "t_end": 130000, "v": -0.3, "ar": 0.85, "label": "chorus", "bar_count": 8 }
+      ],
+      "transitions": [
+        { "from_seg": 0, "to_seg": 1, "dv": -0.2, "dar": 0.7 },
+        { "from_seg": 1, "to_seg": 2, "dv": -0.8, "dar": 0.75 }
+      ],
+      "mood_distribution": [0.333333, 0.333333, 0.0, 0.333333, 0.0]
+    },
+    {
+      "id": "jamendo_example_2",
+      "title": "Street Heat",
+      "artist": "Urban Pulse",
+      "bpm": 110,
+      "audio_url": "https://mp3l.jamendo.com/?trackid=example2",
+      "jamendo_tags": ["energetic", "electronic"],
+      "musixmatch": {
+        "commontrack_id": "87654321",
+        "track_id": "274345546",
+        "has_subtitles": 1,
+        "has_lyrics": 1
+      },
+      "beat_grid": {
+        "offset_ms": 0,
+        "bar_ms": 2182
+      },
+      "segments": [
+        { "t_start": 0, "t_end": 30000, "v": 0.2, "ar": 0.4, "label": "intro", "bar_count": 4 },
+        { "t_start": 30000, "t_end": 75000, "v": -0.3, "ar": 0.85, "label": "chorus", "bar_count": 16 }
+      ],
+      "transitions": [
+        { "from_seg": 0, "to_seg": 1, "dv": -0.5, "dar": 0.45 }
+      ],
+      "mood_distribution": [0.0, 0.0, 0.5, 0.5, 0.0]
+    }
+  ]
+}
