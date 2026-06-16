@@ -2,14 +2,18 @@
 export const LYRICS_TRUST_WINDOW_MS = 30_000;
 export const LYRICS_ENTRY_TOLERANCE_MS = 500;
 
+/** Frames to reject a far-ahead clock right after handoff (outgoing track residue). */
+export const LYRICS_HANDOFF_HOLD_READS = 12;
+
 export type LyricsSyncGate = {
   trackId: string;
   entryMs: number;
   trustClock: boolean;
+  holdFarAheadReads: number;
 };
 
 export function createLyricsSyncGate(): LyricsSyncGate {
-  return { trackId: "", entryMs: 0, trustClock: false };
+  return { trackId: "", entryMs: 0, trustClock: false, holdFarAheadReads: 0 };
 }
 
 /**
@@ -28,12 +32,11 @@ export function resolveLyricsSyncMs(
     gate.trackId = trackId;
     gate.entryMs = entry;
     gate.trustClock = false;
+    gate.holdFarAheadReads = LYRICS_HANDOFF_HOLD_READS;
   }
 
   if (!gate.trustClock) {
-    if (entry > 0 && currentMs > entry + LYRICS_TRUST_WINDOW_MS) {
-      return entry;
-    }
+    const farAhead = entry > 0 && currentMs > entry + LYRICS_TRUST_WINDOW_MS;
 
     const alignedToEntry =
       entry <= 0
@@ -46,6 +49,16 @@ export function resolveLyricsSyncMs(
       currentMs <= entry + LYRICS_TRUST_WINDOW_MS;
 
     if (alignedToEntry || advancingFromEntry) {
+      gate.trustClock = true;
+      gate.holdFarAheadReads = 0;
+      return currentMs;
+    }
+
+    if (farAhead) {
+      if (gate.holdFarAheadReads > 0) {
+        gate.holdFarAheadReads -= 1;
+        return entry;
+      }
       gate.trustClock = true;
       return currentMs;
     }

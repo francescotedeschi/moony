@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createLyricsSyncGate,
   LYRICS_ENTRY_TOLERANCE_MS,
+  LYRICS_HANDOFF_HOLD_READS,
   LYRICS_TRUST_WINDOW_MS,
   resolveLyricsSyncMs,
 } from "./lyricsSyncGate";
@@ -42,6 +43,21 @@ describe("resolveLyricsSyncMs", () => {
 
     expect(resolveLyricsSyncMs(gate, stale, "track-b", entry)).toBe(entry);
     expect(gate.trustClock).toBe(false);
+  });
+
+  it("follows live playback when lyrics enable after the post-entry window", () => {
+    const gate = createLyricsSyncGate();
+    const entry = 45_000;
+    const late = entry + LYRICS_TRUST_WINDOW_MS + 5_000;
+
+    for (let i = 0; i < LYRICS_HANDOFF_HOLD_READS; i += 1) {
+      expect(resolveLyricsSyncMs(gate, late, "track-a", entry)).toBe(entry);
+      expect(gate.trustClock).toBe(false);
+    }
+
+    expect(resolveLyricsSyncMs(gate, late, "track-a", entry)).toBe(late);
+    expect(gate.trustClock).toBe(true);
+    expect(resolveLyricsSyncMs(gate, late + 1_000, "track-a", entry)).toBe(late + 1_000);
   });
 
   it("resets trust on track change", () => {

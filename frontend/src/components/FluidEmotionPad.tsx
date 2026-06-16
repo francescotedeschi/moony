@@ -304,6 +304,7 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
     if (!playbackEnvelopeHoldRef.current) return;
     playbackEnvelopeHoldRef.current = false;
     dragMotionRef.current = { vx: 0, vy: 0, active: false };
+    simRef.current?.pointerUp();
   };
 
   useEffect(() => {
@@ -312,7 +313,10 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
     let rafId = 0;
 
     const tick = () => {
-      if (!playbackEnvelopeActiveRef.current) return;
+      if (!playbackEnvelopeActiveRef.current) {
+        releasePlaybackEnvelopeHold();
+        return;
+      }
 
       if (
         dragging.current ||

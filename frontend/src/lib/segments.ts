@@ -67,6 +67,52 @@ export function isOnLastSegment(segments: MossSegment[], playbackMs: number): bo
   return segmentIndexAtTime(segments, playbackMs) === segments.length - 1;
 }
 
+/** Prep + fade must fit inside the outro; otherwise handoff starts in the penultimate segment. */
+export const SAME_MOOD_HANDOFF_PREP_MS = 2_000;
+
+export function lastSegmentDurationMs(segments: MossSegment[]): number {
+  if (!segments.length) return 0;
+  const last = segments[segments.length - 1];
+  return Math.max(0, last.t_end - last.t_start);
+}
+
+/** True when the tagged outro is shorter than the incoming crossfade needs. */
+export function needsEarlySameMoodHandoff(
+  segments: MossSegment[],
+  fadeMs: number,
+  prepMs = SAME_MOOD_HANDOFF_PREP_MS,
+): boolean {
+  if (segments.length < 2) return false;
+  const safeFadeMs = Math.max(600, fadeMs);
+  return lastSegmentDurationMs(segments) < safeFadeMs + prepMs;
+}
+
+/** Playhead threshold to start same-mood handoff before a short outro. */
+export function earlySameMoodHandoffMs(
+  segments: MossSegment[],
+  fadeMs: number,
+  prepMs = SAME_MOOD_HANDOFF_PREP_MS,
+): number | null {
+  if (!needsEarlySameMoodHandoff(segments, fadeMs, prepMs)) return null;
+  const last = segments[segments.length - 1];
+  const outroMs = last.t_end - last.t_start;
+  const safeFadeMs = Math.max(600, fadeMs);
+  const lead = Math.max(0, safeFadeMs + prepMs - outroMs);
+  return Math.max(0, last.t_start - lead);
+}
+
+export function isInSameMoodHandoffZone(
+  segments: MossSegment[],
+  playbackMs: number,
+  fadeMs: number,
+  prepMs = SAME_MOOD_HANDOFF_PREP_MS,
+): boolean {
+  if (segments.length < 2) return false;
+  if (isOnLastSegment(segments, playbackMs)) return true;
+  const earlyAt = earlySameMoodHandoffMs(segments, fadeMs, prepMs);
+  return earlyAt != null && playbackMs >= earlyAt;
+}
+
 export function segmentAtTime(segments: MossSegment[], ms: number): MossSegment | null {
   for (const seg of segments) {
     if (ms >= seg.t_start && ms < seg.t_end) return seg;

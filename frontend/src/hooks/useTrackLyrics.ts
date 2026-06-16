@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LyricsResponse } from "../lib/api";
 import { isAbortError } from "../lib/abortError";
 import { fetchLyrics, getCachedLyrics, type CachedLyrics } from "../lib/lyricsCache";
@@ -45,6 +45,12 @@ export function useTrackLyrics(
   enabled: boolean,
 ): TrackLyricsState {
   const [state, setState] = useState<TrackLyricsState>(() => initialState(trackId, enabled));
+  const boundTrackIdRef = useRef(trackId);
+
+  if (boundTrackIdRef.current !== trackId) {
+    boundTrackIdRef.current = trackId;
+    setState(initialState(trackId, enabled));
+  }
 
   useEffect(() => {
     if (!trackId || !enabled) {

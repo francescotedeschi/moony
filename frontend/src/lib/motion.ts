@@ -120,3 +120,13 @@ export function crossfadeFromMatch(
     entryAr: match.segment.ar,
   });
 }
+
+/** Conservative fade length when prefetch has not attached a motion plan yet. */
+export function estimateSameMoodFadeMs(bpm: number): number {
+  return motionCrossfadePlan({
+    bpmFrom: bpm,
+    bpmTo: bpm,
+    entryV: 0,
+    entryAr: 0,
+  }).crossfadeMs;
+}

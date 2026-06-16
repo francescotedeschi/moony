@@ -11,6 +11,43 @@ export type PadLyricsDisplay = {
   pixelUrl?: string;
 };
 
+type PadLyricsTrack = Pick<MatchResponse, "track_id" | "start_ms">;
+
+export function resolvePadLyricsDisplay(
+  prev: PadLyricsDisplay | null,
+  nowPlaying: PadLyricsTrack,
+  trackLyrics: TrackLyricsState,
+): PadLyricsDisplay | null {
+  const ready =
+    !trackLyrics.loading &&
+    trackLyrics.lines.length > 0 &&
+    hasSyncedLyrics(trackLyrics.source, trackLyrics.lines);
+
+  if (ready) {
+    return {
+      trackId: nowPlaying.track_id,
+      entryMs: nowPlaying.start_ms,
+      lines: trackLyrics.lines,
+      source: trackLyrics.source,
+      pixelUrl: trackLyrics.pixelUrl,
+    };
+  }
+
+  if (prev?.trackId !== nowPlaying.track_id) {
+    return null;
+  }
+
+  if (!trackLyrics.loading && !ready) {
+    return null;
+  }
+
+  if (prev.entryMs !== nowPlaying.start_ms) {
+    return { ...prev, entryMs: nowPlaying.start_ms };
+  }
+
+  return prev;
+}
+
 /** Keep the last synced lyrics visible until the next track's lyrics are ready. */
 export function usePadLyricsDisplay(
   nowPlaying: MatchResponse | null,
@@ -25,35 +62,7 @@ export function usePadLyricsDisplay(
       return;
     }
 
-    const ready =
-      !trackLyrics.loading &&
-      trackLyrics.lines.length > 0 &&
-      hasSyncedLyrics(trackLyrics.source, trackLyrics.lines);
-
-    setDisplay((prev) => {
-      if (ready) {
-        return {
-          trackId: nowPlaying.track_id,
-          entryMs: nowPlaying.start_ms,
-          lines: trackLyrics.lines,
-          source: trackLyrics.source,
-          pixelUrl: trackLyrics.pixelUrl,
-        };
-      }
-
-      if (prev && prev.trackId === nowPlaying.track_id) {
-        if (prev.entryMs !== nowPlaying.start_ms) {
-          return { ...prev, entryMs: nowPlaying.start_ms };
-        }
-        return prev;
-      }
-
-      if (prev && prev.trackId !== nowPlaying.track_id && !trackLyrics.loading && !ready) {
-        return null;
-      }
-
-      return prev;
-    });
+    setDisplay((prev) => resolvePadLyricsDisplay(prev, nowPlaying, trackLyrics));
   }, [
     lyricsMode,
     nowPlaying?.track_id,

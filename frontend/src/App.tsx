@@ -31,7 +31,10 @@ import {
   type TrackChangeReason,
 } from "./lib/trackNavigation";
 import {
+  earlySameMoodHandoffMs,
+  isInSameMoodHandoffZone,
   isOnLastSegment,
+  needsEarlySameMoodHandoff,
   segmentAtTime,
   segmentIndexAtTime,
   trackDurationMs,
@@ -46,7 +49,7 @@ import {
 import { moodMonitor, type MoodTrackEntry } from "./lib/moodMonitor";
 import { errorMessage, isAbortError } from "./lib/abortError";
 import { resolveCrossfadeStartForHandoff } from "./lib/crossfadeTiming";
-import { crossfadeFromMatch } from "./lib/motion";
+import { crossfadeFromMatch, estimateSameMoodFadeMs } from "./lib/motion";
 import { waitUntilPlaybackMs } from "./lib/waitPlayback";
 import { seedCatalogYoutubeGain } from "./lib/analyzeTrackLoudness";
 import { useAudioEngine } from "./hooks/useAudioEngine";
@@ -820,13 +823,18 @@ export default function App() {
               : trackDurationMs(timeline);
           const onLastSegment =
             segments.length >= 2 && isOnLastSegment(segments, nowMs);
-          const fadeStart = resolveCrossfadeStartForHandoff({
-            nowMs,
-            fadeMs: plan.crossfadeMs,
-            bpm: playing.bpm,
-            durationMs,
-            onLastSegment,
-          });
+          const inHandoffZone =
+            segments.length >= 2 &&
+            isInSameMoodHandoffZone(segments, nowMs, plan.crossfadeMs);
+          const fadeStart = inHandoffZone
+            ? null
+            : resolveCrossfadeStartForHandoff({
+                nowMs,
+                fadeMs: plan.crossfadeMs,
+                bpm: playing.bpm,
+                durationMs,
+                onLastSegment,
+              });
           const waitMs =
             fadeStart != null && fadeStart > nowMs ? fadeStart - nowMs : 0;
           // Beat wait only while audio is advancing and the downbeat is reachable before track end.
@@ -1778,27 +1786,36 @@ export default function App() {
     if (segments.length < 2) return;
 
     const idx = segmentIndexAtTime(segments, audio.playbackMs);
-    if (idx === lastSegmentIdxRef.current) return;
-
-    const prevIdx = lastSegmentIdxRef.current;
-    lastSegmentIdxRef.current = idx;
     const lastIdx = segments.length - 1;
-    if (idx === lastIdx && prevIdx < lastIdx) {
-      const durationMs = syncedTimeline ? trackDurationMs(syncedTimeline) : 0;
-      const playheadStale =
-        durationMs > 0 && audio.playbackMs > durationMs + 1_500;
-      const handoffReady =
-        syncedTimeline != null &&
-        !playheadStale &&
-        Date.now() >= trackHandoffAllowedAfterRef.current;
-      if (!handoffReady) {
-        lastSegmentIdxRef.current = prevIdx;
+    const estFadeMs = estimateSameMoodFadeMs(nowPlaying.bpm);
+    const earlyHandoffMs = needsEarlySameMoodHandoff(segments, estFadeMs)
+      ? earlySameMoodHandoffMs(segments, estFadeMs)
+      : null;
+
+    const durationMs = syncedTimeline ? trackDurationMs(syncedTimeline) : 0;
+    const playheadStale =
+      durationMs > 0 && audio.playbackMs > durationMs + 1_500;
+    const handoffReady =
+      syncedTimeline != null &&
+      !playheadStale &&
+      Date.now() >= trackHandoffAllowedAfterRef.current;
+    const handoffPending =
+      lastSegmentHandoffTrackRef.current !== nowPlaying.track_id;
+
+    if (handoffPending && handoffReady) {
+      const shouldHandoff =
+        earlyHandoffMs != null
+          ? audio.playbackMs >= earlyHandoffMs
+          : idx === lastIdx;
+      if (shouldHandoff) {
+        void runLastSegmentHandoff(nowPlaying.track_id);
         return;
       }
-      void runLastSegmentHandoff(nowPlaying.track_id);
-      return;
     }
 
+    if (idx === lastSegmentIdxRef.current) return;
+
+    lastSegmentIdxRef.current = idx;
     if (idx === lastIdx) return;
 
     void applySegmentOnCurrentTrack();
@@ -1996,6 +2013,7 @@ export default function App() {
           {nowPlaying && padLyrics ? (
             <div className="moony-pad-lyrics-overlay">
               <LyricsScroller
+                key={padLyrics.trackId}
                 variant="pad"
                 trackId={padLyrics.trackId}
                 lines={padLyrics.lines}
