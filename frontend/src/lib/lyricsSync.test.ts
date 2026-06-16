@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasLyricsAtTime, prepareLyricLines } from "./lyricsSync";
+import { hasLyricsAtTime, lyricAtTime, prepareLyricLines } from "./lyricsSync";
 
 const lines = [
   { t_ms: 5_000, text: "First line", line_index: 0 },
@@ -30,5 +30,13 @@ describe("hasLyricsAtTime", () => {
   it("accepts prepared lines", () => {
     const prepared = prepareLyricLines(lines);
     expect(hasLyricsAtTime(prepared, 29_000)).toBe(true);
+    expect(lyricAtTime(prepared, 29_000)?.text).toBe("Third line");
+  });
+
+  it("returns the same line for visibility and display", () => {
+    const at = lyricAtTime(lines, 6_000);
+    expect(at?.text).toBe("First line");
+    expect(hasLyricsAtTime(lines, 6_000)).toBe(true);
+    expect(lyricAtTime(lines, 4_000)).toBeNull();
   });
 });

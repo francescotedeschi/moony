@@ -42,22 +42,32 @@ export function activeLineIndex(
   return result;
 }
 
+/** Line to show at playback time, or null when no timed text should appear. */
+export function lyricAtTime(
+  lines: LyricLine[] | PreparedLyricLine[],
+  currentMs: number,
+  leadMs = LYRICS_SYNC_LEAD_MS,
+): PreparedLyricLine | null {
+  if (!lines.length) return null;
+  const prepared =
+    "end_ms" in lines[0] ? (lines as PreparedLyricLine[]) : prepareLyricLines(lines);
+  const activeIdx = activeLineIndex(prepared, currentMs, leadMs);
+  if (activeIdx < 0) return null;
+  const line = prepared[activeIdx]!;
+  const t = currentMs + leadMs;
+  if (t < line.t_ms) return null;
+  if (currentMs >= line.end_ms) return null;
+  if (!line.text.trim()) return null;
+  return line;
+}
+
 /** True when playback time falls inside a timed lyric line with non-empty text. */
 export function hasLyricsAtTime(
   lines: LyricLine[] | PreparedLyricLine[],
   currentMs: number,
   leadMs = LYRICS_SYNC_LEAD_MS,
 ): boolean {
-  if (!lines.length) return false;
-  const prepared =
-    "end_ms" in lines[0] ? (lines as PreparedLyricLine[]) : prepareLyricLines(lines);
-  const activeIdx = activeLineIndex(prepared, currentMs, leadMs);
-  if (activeIdx < 0) return false;
-  const line = prepared[activeIdx]!;
-  const t = currentMs + leadMs;
-  if (t < line.t_ms) return false;
-  if (currentMs >= line.end_ms) return false;
-  return line.text.trim().length > 0;
+  return lyricAtTime(lines, currentMs, leadMs) !== null;
 }
 
 /** True when Musixmatch returned timed LRC subtitles (not snippet / static text). */

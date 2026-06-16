@@ -4,8 +4,8 @@ import { usePlaybackSnapshot } from "../hooks/usePlaybackSnapshot";
 import type { PlaybackStore } from "../lib/playbackStore";
 import {
   activeLineIndex,
-  hasLyricsAtTime,
   hasSyncedLyrics,
+  lyricAtTime,
   prepareLyricLines,
   type LyricLine,
 } from "../lib/lyricsSync";
@@ -49,8 +49,12 @@ export function LyricsScroller({
 }: Props) {
   const synced = useMemo(() => hasSyncedLyrics(source, lines), [source, lines]);
   const currentMs = usePlaybackSnapshot(playbackStore, enabled);
-  const syncMs = useLyricsSyncMs(currentMs, trackId, entryMs, syncPlayback);
+  const syncMs = useLyricsSyncMs(currentMs, trackId, entryMs);
   const prepared = useMemo(() => prepareLyricLines(lines), [lines]);
+  const syncedLine = useMemo(
+    () => (syncPlayback ? lyricAtTime(prepared, syncMs) : null),
+    [prepared, syncMs, syncPlayback],
+  );
   const computedActiveIdx = useMemo(
     () => activeLineIndex(prepared, syncMs),
     [prepared, syncMs],
@@ -62,13 +66,15 @@ export function LyricsScroller({
     }
   }, [syncPlayback, computedActiveIdx]);
   const activeIdx = syncPlayback ? computedActiveIdx : frozenActiveIdxRef.current;
-  const padVisible =
-    variant !== "pad"
-      ? true
-      : syncPlayback
-        ? hasLyricsAtTime(prepared, syncMs)
-        : frozenActiveIdxRef.current >= 0 &&
-          Boolean(prepared[frozenActiveIdxRef.current]?.text.trim());
+  const padLine =
+    variant === "pad"
+      ? syncPlayback
+        ? syncedLine
+        : frozenActiveIdxRef.current >= 0
+          ? prepared[frozenActiveIdxRef.current] ?? null
+          : null
+      : null;
+  const padVisible = padLine != null && padLine.text.trim().length > 0;
 
   const scrollIndex = activeIdx < 0 ? 0 : activeIdx;
   const linesKey = useMemo(
@@ -98,11 +104,13 @@ export function LyricsScroller({
 
   if (loading || !synced || !lines.length) return null;
 
-  const displayIdx = activeIdx < 0 ? 0 : activeIdx;
-  const activeLine = prepared[displayIdx];
+  const activeLine =
+    variant === "pad" && padLine
+      ? padLine
+      : prepared[activeIdx < 0 ? 0 : activeIdx];
 
   if (variant === "pad") {
-    if (!padVisible) return null;
+    if (!padVisible || !activeLine) return null;
 
     return (
       <div className="moony-pad-lyrics-overlay">
