@@ -63,7 +63,7 @@ export function useTrackLyrics(
 
     void fetchLyrics(trackId, controller.signal)
       .then((data) => {
-        if (controller.signal.aborted || !data) return;
+        if (controller.signal.aborted || !data || data.track_id !== trackId) return;
         setState(fromCache(data));
       })
       .catch((err) => {

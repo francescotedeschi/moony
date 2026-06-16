@@ -1,0 +1,21 @@
+# Railway multi-service deploy (configure two services in dashboard):
+#
+# 1. API service
+#    Root: /backend
+#    Dockerfile: backend/Dockerfile
+#    Env: MUSIXMATCH_API_KEY, JAMENDO_CLIENT_ID, CATALOG_PATH=/app/catalog/catalog.json
+#    Mount catalog.json or bake into image for demo
+#
+# 2. Web service (static)
+#    Root: /frontend
+#    Dockerfile: frontend/Dockerfile (target: production)
+#    Build arg: VITE_API_URL=https://your-api.up.railway.app
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "backend/Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"

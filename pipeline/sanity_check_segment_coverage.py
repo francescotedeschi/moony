@@ -7,6 +7,11 @@ import json
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend"))
+
+from app.catalog.sections import raw_track_sections  # noqa: E402
+
 CATALOG = Path(__file__).resolve().parents[1] / "catalog" / "catalog.json"
 
 GAP_MS = 500  # ignore sub-500ms holes
@@ -30,7 +35,7 @@ def seg_bounds(raw: dict) -> tuple[int, int]:
 
 
 def analyze_track(track: dict) -> dict:
-    raw_segs = track.get("segments") or []
+    raw_segs = raw_track_sections(track)
     segs = sorted(
         raw_segs,
         key=lambda s: float(s.get("end_sec", s.get("t_end", 0) / 1000.0)),

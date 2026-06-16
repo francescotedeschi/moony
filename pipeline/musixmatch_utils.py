@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import os
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,9 @@ from typing import Any
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend"))
+
+from app.catalog.sections import raw_section_label, raw_track_sections  # noqa: E402
 MUSIXMATCH_BASE = "https://api.musixmatch.com/ws/1.1"
 
 TITLE_CLEAN_RE = re.compile(
@@ -129,13 +133,13 @@ def is_instrumental_catalog_track(track: dict[str, Any]) -> bool:
     if "instrumental" in tags and "vocal" not in tags and "voice" not in tags:
         return True
 
-    segments = track.get("segments") or []
+    segments = raw_track_sections(track)
     if not segments:
         return "instrumental" in tags
 
     vocal_segments = 0
     for seg in segments:
-        label = (seg.get("label") or "").lower()
+        label = raw_section_label(seg)
         desc = (seg.get("description") or "").lower()
         if label == "instrumental" or "voice: instrumental" in desc:
             continue

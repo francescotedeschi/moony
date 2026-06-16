@@ -20,7 +20,7 @@ export function usePadLyricsDisplay(
   const [display, setDisplay] = useState<PadLyricsDisplay | null>(null);
 
   useEffect(() => {
-    if (lyricsMode !== "musixmatch" || !nowPlaying?.musixmatch) {
+    if (lyricsMode !== "musixmatch" || !nowPlaying?.track_id) {
       setDisplay(null);
       return;
     }
@@ -30,20 +30,34 @@ export function usePadLyricsDisplay(
       trackLyrics.lines.length > 0 &&
       hasSyncedLyrics(trackLyrics.source, trackLyrics.lines);
 
-    if (!ready) return;
+    setDisplay((prev) => {
+      if (ready) {
+        return {
+          trackId: nowPlaying.track_id,
+          entryMs: nowPlaying.start_ms,
+          lines: trackLyrics.lines,
+          source: trackLyrics.source,
+          pixelUrl: trackLyrics.pixelUrl,
+        };
+      }
 
-    setDisplay({
-      trackId: nowPlaying.track_id,
-      entryMs: nowPlaying.start_ms,
-      lines: trackLyrics.lines,
-      source: trackLyrics.source,
-      pixelUrl: trackLyrics.pixelUrl,
+      if (prev && prev.trackId === nowPlaying.track_id) {
+        if (prev.entryMs !== nowPlaying.start_ms) {
+          return { ...prev, entryMs: nowPlaying.start_ms };
+        }
+        return prev;
+      }
+
+      if (prev && prev.trackId !== nowPlaying.track_id && !trackLyrics.loading && !ready) {
+        return null;
+      }
+
+      return prev;
     });
   }, [
     lyricsMode,
     nowPlaying?.track_id,
     nowPlaying?.start_ms,
-    nowPlaying?.musixmatch,
     trackLyrics.loading,
     trackLyrics.lines,
     trackLyrics.source,

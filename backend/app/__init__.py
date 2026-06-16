@@ -1,0 +1,1 @@
+"""Moony backend application package."""

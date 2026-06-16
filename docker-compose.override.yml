@@ -1,0 +1,5 @@
+# Local override — use catalog v1.7 (not committed by default if gitignored)
+services:
+  api:
+    environment:
+      CATALOG_PATH: /app/catalog/catalog_V17.json

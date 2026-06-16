@@ -141,6 +141,7 @@ export type TrackTimeline = {
   bpm: number;
   duration_ms: number;
   has_motion?: boolean;
+  musixmatch?: Record<string, unknown> | null;
   motion_preview?: MotionPreviewPoint[];
   segments: MossSegment[];
 };

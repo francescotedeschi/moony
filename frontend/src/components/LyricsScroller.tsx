@@ -47,7 +47,7 @@ export function LyricsScroller({
   variant = "trail",
 }: Props) {
   const synced = useMemo(() => hasSyncedLyrics(source, lines), [source, lines]);
-  const currentMs = usePlaybackSnapshot(playbackStore, enabled && syncPlayback);
+  const currentMs = usePlaybackSnapshot(playbackStore, enabled);
   const syncMs = useLyricsSyncMs(currentMs, trackId, entryMs);
   const prepared = useMemo(() => prepareLyricLines(lines), [lines]);
   const computedActiveIdx = useMemo(

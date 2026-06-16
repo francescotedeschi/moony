@@ -60,6 +60,15 @@ export const EMOTION_ZONES: EmotionZone[] = [
   },
 ];
 
+const SESSION_SEED_MOOD_NAMES = new Set(["Calm", "Joy", "Energy"]);
+
+/** Random opener mood for the first track of a browser session. */
+export function pickRandomSessionSeedTarget(): { v: number; ar: number } {
+  const zones = EMOTION_ZONES.filter((zone) => SESSION_SEED_MOOD_NAMES.has(zone.name));
+  const zone = zones[Math.floor(Math.random() * zones.length)] ?? EMOTION_ZONES[1];
+  return { v: zone.v, ar: zone.ar };
+}
+
 /** Solid bar colors — one per pad mood (no V/A gradients). */
 export const MOOD_COLORS: Record<string, string> = {
   calm: "rgb(34, 197, 94)",
