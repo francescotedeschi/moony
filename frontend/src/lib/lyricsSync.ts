@@ -42,6 +42,24 @@ export function activeLineIndex(
   return result;
 }
 
+/** True when playback time falls inside a timed lyric line with non-empty text. */
+export function hasLyricsAtTime(
+  lines: LyricLine[] | PreparedLyricLine[],
+  currentMs: number,
+  leadMs = LYRICS_SYNC_LEAD_MS,
+): boolean {
+  if (!lines.length) return false;
+  const prepared =
+    "end_ms" in lines[0] ? (lines as PreparedLyricLine[]) : prepareLyricLines(lines);
+  const activeIdx = activeLineIndex(prepared, currentMs, leadMs);
+  if (activeIdx < 0) return false;
+  const line = prepared[activeIdx]!;
+  const t = currentMs + leadMs;
+  if (t < line.t_ms) return false;
+  if (currentMs >= line.end_ms) return false;
+  return line.text.trim().length > 0;
+}
+
 /** True when Musixmatch returned timed LRC subtitles (not snippet / static text). */
 export function hasSyncedLyrics(source: string | undefined, lines: LyricLine[]): boolean {
   if (source === "snippet") return false;

@@ -3,6 +3,7 @@ import { EMOTION_ZONES } from "../lib/emotions";
 import { MotionCurveOverlay } from "./MotionCurveOverlay";
 import {
   formatMs,
+  isTimelineBarReady,
   segmentAtTime,
   segmentDescriptionLines,
   segmentHasInspectData,
@@ -307,6 +308,40 @@ function SegmentBlock({
   return <div className={className} style={style} title={title} {...hoverHandlers} />;
 }
 
+function MatchTimelineSkeletonRow({
+  label,
+  sublabel,
+  labelNote,
+}: {
+  label: string;
+  sublabel?: string;
+  labelNote?: string;
+}) {
+  return (
+    <div
+      className="timeline-row timeline-row--loading"
+      aria-busy="true"
+      aria-label={`Loading timeline for ${label}`}
+      data-testid="match-timeline-loading"
+    >
+      <div className="mb-0 flex items-baseline justify-between gap-2">
+        <div className="min-w-0">
+          <p className="timeline-row-label truncate">
+            {label}
+            {labelNote ? (
+              <span className="ml-2 font-normal italic text-white/45">{labelNote}</span>
+            ) : null}
+          </p>
+          {sublabel ? <p className="timeline-row-sublabel truncate">{sublabel}</p> : null}
+        </div>
+      </div>
+      <div className="timeline-track-shell timeline-track-shell--loading">
+        <div className="timeline-track-loading-bar" />
+      </div>
+    </div>
+  );
+}
+
 function MatchRow({
   row,
   highlightIndex,
@@ -318,6 +353,16 @@ function MatchRow({
   onSelect?: (trackId: string, entryMs: number) => void;
   labelNote?: string;
 }) {
+  if (!isTimelineBarReady(row)) {
+    return (
+      <MatchTimelineSkeletonRow
+        label={row.emotion}
+        sublabel={`${row.title} · ${row.artist}`}
+        labelNote={labelNote}
+      />
+    );
+  }
+
   const zone = EMOTION_ZONES.find((z) => z.name === row.emotion);
   const syncSeg = row.segments[highlightIndex];
   const syncStartMs = syncSeg?.t_start ?? row.entryMs;
@@ -371,7 +416,9 @@ export function SegmentTimelinePlayer({
     <div className="space-y-2" data-testid="synced-matches">
       <p className="timeline-matches-heading">Synced matches</p>
       {matchesLoading && view.matches.length === 0 ? (
-        <p className="text-sm text-white/35">Loading matches…</p>
+        EMOTION_ZONES.map((zone) => (
+          <MatchTimelineSkeletonRow key={zone.name} label={zone.name} />
+        ))
       ) : view.matches.length > 0 ? (
         view.matches.map((row, i) => (
           <MatchRow

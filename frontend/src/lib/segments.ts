@@ -113,6 +113,20 @@ export function isInSameMoodHandoffZone(
   return earlyAt != null && playbackMs >= earlyAt;
 }
 
+/** True when playback actually moved into a different MOSS segment (ignores timeline-only updates). */
+export function segmentCrossedBetween(
+  segments: MossSegment[],
+  prevMs: number | null,
+  currentMs: number,
+): { crossed: boolean; prevIdx: number; currentIdx: number } {
+  const currentIdx = segmentIndexAtTime(segments, currentMs);
+  if (prevMs == null) {
+    return { crossed: false, prevIdx: currentIdx, currentIdx };
+  }
+  const prevIdx = segmentIndexAtTime(segments, prevMs);
+  return { crossed: prevIdx !== currentIdx, prevIdx, currentIdx };
+}
+
 export function segmentAtTime(segments: MossSegment[], ms: number): MossSegment | null {
   for (const seg of segments) {
     if (ms >= seg.t_start && ms < seg.t_end) return seg;
@@ -128,6 +142,32 @@ export function segmentIndexAtTime(segments: MossSegment[], ms: number): number 
 export function trackDurationMs(timeline: TrackTimeline): number {
   if (timeline.duration_ms > 0) return timeline.duration_ms;
   return timeline.segments.reduce((max, s) => Math.max(max, s.t_end), 0);
+}
+
+export function needsHandoffTimeline(timeline: TrackTimeline | null | undefined): boolean {
+  if (!timeline) return true;
+  return timeline.segments.length <= 1;
+}
+
+/** Prefetch placeholder before /tracks/.../timeline returns full MOSS sections. */
+export function isPrefetchTimelineStub(timeline: TrackTimeline): boolean {
+  if (timeline.segments.length !== 1) return false;
+  const seg = timeline.segments[0];
+  const dur = trackDurationMs(timeline);
+  return dur > 0 && seg.t_end < dur * 0.9;
+}
+
+/** Match row bar can render once full MOSS segments are available (motion curve optional). */
+export function isTimelineBarReady(timeline: TrackTimeline | null | undefined): boolean {
+  if (!timeline || timeline.segments.length === 0) return false;
+  if (timeline.segments.length > 1) return true;
+  return !isPrefetchTimelineStub(timeline);
+}
+
+/** Background enrich: full segments and optional motion overlay. */
+export function needsTimelineEnrich(timeline: TrackTimeline | null | undefined): boolean {
+  if (!isTimelineBarReady(timeline)) return true;
+  return !timeline!.motion_preview || timeline!.motion_preview.length < 2;
 }
 
 /** Same rules as backend ``segment_entry_eligible`` (not first segment; start ≤ 40% duration). */

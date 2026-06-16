@@ -35,7 +35,10 @@ import {
   isInSameMoodHandoffZone,
   isOnLastSegment,
   needsEarlySameMoodHandoff,
+  needsHandoffTimeline,
+  needsTimelineEnrich,
   segmentAtTime,
+  segmentCrossedBetween,
   segmentIndexAtTime,
   trackDurationMs,
   type MatchTimelineRow,
@@ -192,16 +195,6 @@ function stubTimelineFromMatch(match: MatchResponse): TrackTimeline {
   };
 }
 
-function needsHandoffTimeline(timeline: TrackTimeline | null | undefined): boolean {
-  if (!timeline) return true;
-  return timeline.segments.length <= 1;
-}
-
-function needsTimelineEnrich(timeline: TrackTimeline | null | undefined): boolean {
-  if (needsHandoffTimeline(timeline)) return true;
-  return !timeline!.motion_preview || timeline!.motion_preview.length < 2;
-}
-
 function matchRowKey(emotion: string, trackId: string): string {
   return `${emotion}:${trackId}`;
 }
@@ -305,6 +298,7 @@ export default function App() {
   /** Mutex: at most one track change (A/B/C/…) at a time. */
   const trackChangeInFlightRef = useRef(false);
   const lastSegmentIdxRef = useRef(-1);
+  const lastSegmentPlaybackMsRef = useRef<number | null>(null);
   /** One same-mood crossfade handoff per track when entering the last segment. */
   const lastSegmentHandoffTrackRef = useRef<string | null>(null);
   /** Blocks auto segment/handoff effects while the user seeks via timeline click. */
@@ -470,7 +464,7 @@ export default function App() {
       const key = matchRowKey(emotion, trackId);
       if (enrichedRowsRef.current.has(key)) return;
       try {
-        const row = await api.trackTimeline(trackId, signal);
+        const row = await api.trackTimeline(trackId, signal, { motionPreview: true });
         if (signal?.aborted) return;
         enrichedRowsRef.current.add(key);
         setMatchRows((prev) =>
@@ -1578,6 +1572,7 @@ export default function App() {
     const signal = controller.signal;
     enrichedRowsRef.current.clear();
     lastSegmentIdxRef.current = -1;
+    lastSegmentPlaybackMsRef.current = null;
     lastSegmentHandoffTrackRef.current = null;
     trackHandoffAllowedAfterRef.current = Date.now() + TRACK_HANDOFF_SETTLE_MS;
     resetSameMoodStability();
@@ -1787,6 +1782,13 @@ export default function App() {
 
     const idx = segmentIndexAtTime(segments, audio.playbackMs);
     const lastIdx = segments.length - 1;
+    const { crossed: crossedSegment, prevIdx } = segmentCrossedBetween(
+      segments,
+      lastSegmentPlaybackMsRef.current,
+      audio.playbackMs,
+    );
+    lastSegmentPlaybackMsRef.current = audio.playbackMs;
+
     const estFadeMs = estimateSameMoodFadeMs(nowPlaying.bpm);
     const earlyHandoffMs = needsEarlySameMoodHandoff(segments, estFadeMs)
       ? earlySameMoodHandoffMs(segments, estFadeMs)
@@ -1806,11 +1808,16 @@ export default function App() {
       const shouldHandoff =
         earlyHandoffMs != null
           ? audio.playbackMs >= earlyHandoffMs
-          : idx === lastIdx;
+          : crossedSegment && idx === lastIdx && prevIdx < lastIdx;
       if (shouldHandoff) {
         void runLastSegmentHandoff(nowPlaying.track_id);
         return;
       }
+    }
+
+    if (!crossedSegment) {
+      lastSegmentIdxRef.current = idx;
+      return;
     }
 
     if (idx === lastSegmentIdxRef.current) return;
@@ -2011,21 +2018,19 @@ export default function App() {
             </div>
           ) : null}
           {nowPlaying && padLyrics ? (
-            <div className="moony-pad-lyrics-overlay">
-              <LyricsScroller
-                key={padLyrics.trackId}
-                variant="pad"
-                trackId={padLyrics.trackId}
-                lines={padLyrics.lines}
-                playbackStore={audio.lyricsPlaybackStore}
-                entryMs={padLyrics.entryMs}
-                pixelUrl={padLyrics.pixelUrl}
-                source={padLyrics.source}
-                loading={false}
-                enabled={audio.hasTrack}
-                syncPlayback={padLyricsSyncPlayback}
-              />
-            </div>
+            <LyricsScroller
+              key={padLyrics.trackId}
+              variant="pad"
+              trackId={padLyrics.trackId}
+              lines={padLyrics.lines}
+              playbackStore={audio.lyricsPlaybackStore}
+              entryMs={padLyrics.entryMs}
+              pixelUrl={padLyrics.pixelUrl}
+              source={padLyrics.source}
+              loading={false}
+              enabled={audio.hasTrack}
+              syncPlayback={padLyricsSyncPlayback}
+            />
           ) : null}
           {!nowPlaying ? (
             <button

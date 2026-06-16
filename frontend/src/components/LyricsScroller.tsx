@@ -4,6 +4,7 @@ import { usePlaybackSnapshot } from "../hooks/usePlaybackSnapshot";
 import type { PlaybackStore } from "../lib/playbackStore";
 import {
   activeLineIndex,
+  hasLyricsAtTime,
   hasSyncedLyrics,
   prepareLyricLines,
   type LyricLine,
@@ -48,7 +49,7 @@ export function LyricsScroller({
 }: Props) {
   const synced = useMemo(() => hasSyncedLyrics(source, lines), [source, lines]);
   const currentMs = usePlaybackSnapshot(playbackStore, enabled);
-  const syncMs = useLyricsSyncMs(currentMs, trackId, entryMs);
+  const syncMs = useLyricsSyncMs(currentMs, trackId, entryMs, syncPlayback);
   const prepared = useMemo(() => prepareLyricLines(lines), [lines]);
   const computedActiveIdx = useMemo(
     () => activeLineIndex(prepared, syncMs),
@@ -61,6 +62,13 @@ export function LyricsScroller({
     }
   }, [syncPlayback, computedActiveIdx]);
   const activeIdx = syncPlayback ? computedActiveIdx : frozenActiveIdxRef.current;
+  const padVisible =
+    variant !== "pad"
+      ? true
+      : syncPlayback
+        ? hasLyricsAtTime(prepared, syncMs)
+        : frozenActiveIdxRef.current >= 0 &&
+          Boolean(prepared[frozenActiveIdxRef.current]?.text.trim());
 
   const scrollIndex = activeIdx < 0 ? 0 : activeIdx;
   const linesKey = useMemo(
@@ -94,26 +102,30 @@ export function LyricsScroller({
   const activeLine = prepared[displayIdx];
 
   if (variant === "pad") {
+    if (!padVisible) return null;
+
     return (
-      <div
-        className={`moony-lyrics-trail moony-lyrics-trail--pad-single${
-          isEntering ? " moony-lyrics-trail--entering" : ""
-        }`}
-        data-testid="lyrics-trail"
-        aria-label="Synced lyrics"
-      >
-        {pixelUrl ? (
-          <img src={pixelUrl} alt="" className="hidden" width={1} height={1} />
-        ) : null}
-        <div className="moony-lyrics-trail__viewport moony-lyrics-trail__viewport--single" aria-live="polite">
-          <p
-            key={`${trackId}-${activeLine.line_index}-${activeLine.t_ms}`}
-            className="moony-lyrics-trail__line moony-lyrics-trail__line--active"
-            aria-current="true"
-            data-testid="lyrics-active-line"
-          >
-            {activeLine.text}
-          </p>
+      <div className="moony-pad-lyrics-overlay">
+        <div
+          className={`moony-lyrics-trail moony-lyrics-trail--pad-single${
+            isEntering ? " moony-lyrics-trail--entering" : ""
+          }`}
+          data-testid="lyrics-trail"
+          aria-label="Synced lyrics"
+        >
+          {pixelUrl ? (
+            <img src={pixelUrl} alt="" className="hidden" width={1} height={1} />
+          ) : null}
+          <div className="moony-lyrics-trail__viewport moony-lyrics-trail__viewport--single" aria-live="polite">
+            <p
+              key={`${trackId}-${activeLine.line_index}-${activeLine.t_ms}`}
+              className="moony-lyrics-trail__line moony-lyrics-trail__line--active"
+              aria-current="true"
+              data-testid="lyrics-active-line"
+            >
+              {activeLine.text}
+            </p>
+          </div>
         </div>
       </div>
     );
