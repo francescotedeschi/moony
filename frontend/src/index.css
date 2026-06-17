@@ -420,26 +420,34 @@ body {
   }
 
   .moony-player-section {
-    /* 5rem = shell px-6 (3rem) + 1rem breathing room each side */
-    --moony-pad-scale: min(1, calc((100vw - 5rem) / 600));
+    /*
+     * tan(atan2(length, length)) = dimensionless ratio — the only pure-CSS
+     * way to divide two lengths and get a <number> valid for scale() and
+     * calc(px * number).  Plain calc(vw / 600) produces a <length>, not a
+     * <number>, so min(1, that) would be invalid and the transform would
+     * silently not apply.
+     * 5rem = shell px-6 (3rem) + 1rem breathing room each side.
+     */
+    --moony-pad-scale: min(1, tan(atan2(100vw - 5rem, 600px)));
     width: calc(600px * var(--moony-pad-scale)) !important;
     max-width: calc(100vw - 5rem);
-    overflow-x: hidden;
+    /* No overflow-x: hidden here — the app-shell handles containment and
+       overflow-x: hidden on this element can clip the composited WebGL canvas. */
   }
 
   .moony-app--landing .moony-player-section {
     --moony-pad-scale: min(
       1,
-      calc((100vw - 5rem) / 600),
-      calc((100dvh - var(--moony-content-offset) - 8rem) / 600)
+      tan(atan2(100vw - 5rem, 600px)),
+      tan(atan2(100dvh - var(--moony-content-offset) - 8rem, 600px))
     );
   }
 
   .moony-app--playing .moony-player-section {
     --moony-pad-scale: min(
       1,
-      calc((100vw - 5rem) / 600),
-      calc((100dvh - var(--moony-content-offset) - 11rem) / 600)
+      tan(atan2(100vw - 5rem, 600px)),
+      tan(atan2(100dvh - var(--moony-content-offset) - 11rem, 600px))
     );
   }
 
