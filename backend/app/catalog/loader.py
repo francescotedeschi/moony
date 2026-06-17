@@ -123,6 +123,7 @@ class CatalogStore:
                 "track_count": 0,
                 "with_musixmatch": 0,
                 "with_subtitles": 0,
+                "with_synced_subtitles": 0,
                 "with_motion": 0,
                 "motion_coverage": 0.0,
                 "lyrics_mode": "off",
@@ -143,6 +144,11 @@ class CatalogStore:
             for t in cat.tracks
             if t.musixmatch and t.musixmatch.has_subtitles
         )
+        with_synced_subs = sum(
+            1
+            for t in cat.tracks
+            if t.musixmatch and t.musixmatch.has_synced_subtitles
+        )
         with_motion = sum(1 for t in cat.tracks if t.has_motion)
         with_loudness = sum(1 for t in cat.tracks if t.loudness)
         total = len(cat.tracks)
@@ -162,6 +168,7 @@ class CatalogStore:
             "track_count": total,
             "with_musixmatch": with_mm,
             "with_subtitles": with_subs,
+            "with_synced_subtitles": with_synced_subs,
             "with_motion": with_motion,
             "motion_coverage": round(with_motion / total, 4) if total else 0.0,
             "with_loudness": with_loudness,

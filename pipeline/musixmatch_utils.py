@@ -22,6 +22,52 @@ TITLE_CLEAN_RE = re.compile(
     r"\s*[\(\[](?:album version|feat\.?|ft\.?|prod\.?|with|remix|mix|wav)[^\)\]]*[\)\]]",
     re.IGNORECASE,
 )
+LRC_TIMESTAMP = re.compile(r"\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]")
+
+
+def count_lrc_timed_lines(body: str) -> int:
+    """Count non-empty lyric lines that carry at least one LRC timestamp."""
+    count = 0
+    for raw in (body or "").strip().splitlines():
+        stripped = raw.strip()
+        if not stripped or not LRC_TIMESTAMP.search(stripped):
+            continue
+        text = LRC_TIMESTAMP.sub("", stripped).strip()
+        if text:
+            count += 1
+    return count
+
+
+def fetch_has_synced_subtitles(
+    client: httpx.Client,
+    *,
+    api_key: str,
+    track_id: str | None,
+    commontrack_id: str | None,
+) -> tuple[bool, int]:
+    """Live Musixmatch check: True when subtitle_body contains timed LRC lines."""
+    if not track_id and not commontrack_id:
+        return False, 0
+
+    resp = client.get(
+        f"{MUSIXMATCH_BASE}/track.subtitle.get",
+        params={
+            "apikey": api_key,
+            "track_id": track_id or "",
+            "commontrack_id": commontrack_id or "",
+            "subtitle_format": "lrc",
+        },
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    header = data.get("message", {}).get("header", {})
+    if int(header.get("status_code") or 0) != 200:
+        return False, 0
+
+    subtitle = data.get("message", {}).get("body", {}).get("subtitle") or {}
+    body = subtitle.get("subtitle_body") or ""
+    line_count = count_lrc_timed_lines(body)
+    return line_count > 0, line_count
 
 
 def load_dotenv(path: Path | None = None) -> None:
@@ -56,6 +102,7 @@ def pending_musixmatch_block() -> dict[str, Any]:
         "track_id": None,
         "has_lyrics": 0,
         "has_subtitles": 0,
+        "has_synced_subtitles": False,
         "match_status": "pending",
     }
 
@@ -66,6 +113,7 @@ def musixmatch_from_match(track: dict[str, Any]) -> dict[str, Any]:
         "track_id": str(track["track_id"]),
         "has_lyrics": int(track.get("has_lyrics") or 0),
         "has_subtitles": int(track.get("has_subtitles") or 0),
+        "has_synced_subtitles": False,
         "match_status": "matched",
     }
 

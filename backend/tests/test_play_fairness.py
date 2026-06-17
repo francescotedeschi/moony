@@ -128,6 +128,7 @@ def _joy_track(tid: str, *, subtitles: bool = False) -> dict:
             "commontrack_id": f"ct-{tid}",
             "has_subtitles": 1,
             "has_lyrics": 1,
+            "has_synced_subtitles": True,
         }
     return row
 
@@ -209,7 +210,7 @@ def test_find_session_seed_prefers_synced_subtitles():
     assert result is not None
     assert result[0].id == "with-subs"
     assert result[0].musixmatch is not None
-    assert result[0].musixmatch.has_subtitles == 1
+    assert result[0].musixmatch.has_synced_subtitles is True
 
 
 def test_find_joy_session_seed_joy_only_at_first_segment():

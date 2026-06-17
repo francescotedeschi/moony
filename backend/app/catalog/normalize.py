@@ -314,6 +314,7 @@ def _normalize_musixmatch(raw: dict[str, Any] | None) -> MusixmatchRef | None:
         track_id=tid,
         has_lyrics=int(raw.get("has_lyrics") or 0),
         has_subtitles=int(raw.get("has_subtitles") or 0),
+        has_synced_subtitles=bool(raw.get("has_synced_subtitles")),
     )
 
 

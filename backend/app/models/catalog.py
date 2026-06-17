@@ -11,6 +11,8 @@ class MusixmatchRef(BaseModel):
     track_id: str | None = None
     has_subtitles: int = 0
     has_lyrics: int = 0
+    """Verified via Musixmatch API: subtitle_body contains LRC timestamps."""
+    has_synced_subtitles: bool = False
 
 
 class BeatGrid(BaseModel):

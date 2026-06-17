@@ -792,11 +792,11 @@ def _pick_joy_session_opener(
 
 
 def track_has_synced_subtitles(track: Track) -> bool:
-    """True when Musixmatch timed subtitles are available for this track."""
+    """True when Musixmatch timed subtitles were verified on this catalog row."""
     mm = track.musixmatch
-    if not mm or not mm.has_subtitles:
+    if not mm or not (mm.track_id or mm.commontrack_id):
         return False
-    return bool(mm.track_id or mm.commontrack_id)
+    return bool(mm.has_synced_subtitles)
 
 
 def find_session_seed(
