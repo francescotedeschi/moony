@@ -130,7 +130,7 @@ export function CatalogInfoPanel({
       </header>
 
       {!collapsed ? (
-        <div className="px-3 py-3">
+        <div className="catalog-panel-body px-3 py-3">
           {loading ? (
             <p className="text-[21px] text-white/40">Loading catalog stats…</p>
           ) : error ? (
