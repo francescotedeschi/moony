@@ -444,14 +444,33 @@ body {
   }
 
   .moony-app--playing .moony-player-section {
+    /*
+     * Cannot reference --moony-content-offset here because the playing-state
+     * value of that variable uses --moony-header-play-top /
+     * --moony-title-size-playing which are defined on .moony-header (a child),
+     * not on any ancestor — CSS custom properties don't propagate upward.
+     * Inline the playing header height (~0.75rem top + 2.4375rem title +
+     * 0.15rem gap ≈ 3.5rem) plus 11rem for the dock/controls clearance.
+     */
     --moony-pad-scale: min(
       1,
       tan(atan2(100vw - 5rem, 600px)),
-      tan(atan2(100dvh - var(--moony-content-offset) - 11rem, 600px))
+      tan(atan2(100dvh - 3.5rem - 11rem, 600px))
     );
   }
 
   .moony-pad-shell {
+    /*
+     * mx-auto on a flex item wider than its container results in flex-start
+     * alignment (not center) because negative free space resolves auto margins
+     * to 0 before the align step. Removing auto margins and setting an explicit
+     * align-self: center forces the correct centered position (-145px overflow
+     * on each side) so transform-origin: top center coincides with the
+     * player-section center.
+     */
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    align-self: center;
     transform: scale(var(--moony-pad-scale));
     transform-origin: top center;
     margin-bottom: calc(600px * (var(--moony-pad-scale) - 1));
