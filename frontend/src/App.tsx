@@ -14,6 +14,7 @@ import { TopInfoNav, type InfoPanel } from "./components/info/TopInfoNav";
 import { MatchesGearButton } from "./components/MatchesGearButton";
 import { SegmentTimelinePlayer } from "./components/SegmentTimelinePlayer";
 import { PlaybackControls } from "./components/PlaybackControls";
+import { PadOrbitLoader } from "./components/PadOrbitLoader";
 import { LyricsScroller } from "./components/LyricsScroller";
 import {
   api,
@@ -214,6 +215,7 @@ export default function App() {
   lyricsModeRef.current = lyricsMode;
   const [position, setPosition] = useState({ v: 0, ar: 0 });
   const [direction, setDirection] = useState({ v: 0, ar: 0 });
+  const [landingHeaderCompact, setLandingHeaderCompact] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<MatchResponse | null>(null);
   const [prefetch, setPrefetch] = useState<PrefetchResponse["intents"] | null>(null);
   const [targetZonePrefetchNote, setTargetZonePrefetchNote] = useState<{
@@ -272,6 +274,11 @@ export default function App() {
   const playedTrackIdsRef = useRef<Set<string>>(new Set());
   /** Opener mood (Calm / Joy / Energy) — fixed for this page load. */
   const sessionSeedTargetRef = useRef(pickRandomSessionSeedTarget());
+  const landingMatchRef = useRef<MatchResponse | null>(null);
+  const landingPreloadRef = useRef<Promise<MatchResponse | null> | null>(null);
+  const landingPreloadAbortRef = useRef<AbortController | null>(null);
+  const audioRef = useRef(audio);
+  audioRef.current = audio;
   const positionRef = useRef(position);
   const targetRef = useRef(position);
   const directionRef = useRef(direction);
@@ -349,6 +356,55 @@ export default function App() {
         setPlayStatsEnabled(Boolean(h.play_stats?.enabled));
       })
       .catch(() => {});
+  }, []);
+
+  /** Landing: match + audio buffer ready before the user presses Play. */
+  useEffect(() => {
+    const controller = new AbortController();
+    landingPreloadAbortRef.current = controller;
+
+    landingPreloadRef.current = (async () => {
+      try {
+        const target = sessionSeedTargetRef.current;
+        const match = await api.match(
+          {
+            position: target,
+            direction: directionRef.current,
+            bpm_current: 120,
+            exclude_ids: [],
+            session_seed: true,
+            embedding_penalties: [],
+          },
+          controller.signal,
+        );
+        if (controller.signal.aborted) return null;
+
+        const url = trackAudioUrl(match.track_id);
+        if (match.youtube_playback_gain != null) {
+          seedCatalogYoutubeGain(url, match.youtube_playback_gain);
+        }
+        await audioRef.current
+          .preloadTrack({
+            url,
+            startMs: match.start_ms,
+            youtubePlaybackGain: match.youtube_playback_gain,
+          })
+          .catch(() => {});
+        if (controller.signal.aborted) return null;
+        landingMatchRef.current = match;
+        return match;
+      } catch (e) {
+        if (isAbortError(e) || controller.signal.aborted) return null;
+        return null;
+      }
+    })();
+
+    return () => {
+      controller.abort("landing-preload-cancel");
+      landingPreloadAbortRef.current = null;
+      landingMatchRef.current = null;
+      landingPreloadRef.current = null;
+    };
   }, []);
 
   const padMatchPosition = useCallback(() => {
@@ -801,6 +857,7 @@ export default function App() {
           trackEntryMsRef.current = match.start_ms;
           nowPlayingRef.current = match;
           setNowPlaying(match);
+          padRef.current?.kickstartPlaybackEnvelope?.();
           opts?.onTransitionStart?.();
         };
         const normGain = match.youtube_playback_gain;
@@ -861,9 +918,15 @@ export default function App() {
             "Playback timed out — try again",
           );
         } else {
-          audio.interruptPlayback();
+          const isSessionStart = !nowPlayingRef.current;
+          await audio.awaitPreloadFor(url, match.start_ms);
+          if (!audio.isTrackPreloaded(url, match.start_ms)) {
+            audio.interruptPlayback();
+          }
           const entryFade =
-            match.crossfade_ms != null && match.crossfade_ms > 0;
+            !isSessionStart &&
+            match.crossfade_ms != null &&
+            match.crossfade_ms > 0;
           await withTimeout(
             entryFade
               ? audio.crossfadeTo({
@@ -1427,10 +1490,40 @@ export default function App() {
       if (reason === "start") {
         audio.ensureContext();
         trackChangeInFlightRef.current = true;
+        matchingRef.current = true;
+        setError(null);
+        setLoading(true);
         try {
+          let match = landingMatchRef.current;
+          if (landingPreloadRef.current) {
+            match = (await landingPreloadRef.current) ?? match;
+          }
+
+          if (match) {
+            const seq = ++matchSeqRef.current;
+            const target = sessionSeedTargetRef.current;
+            targetRef.current = target;
+            setPosition(target);
+            padRef.current?.setUserTarget(target.v, target.ar);
+            landingMatchRef.current = null;
+            landingPreloadRef.current = null;
+            try {
+              const applied = await applyMatch(match, seq, {
+                onTransitionStart: () => setSwitchingTrack(false),
+              });
+              if (applied) return;
+            } catch {
+              /* fall back to live match only if playback did not start */
+            }
+            if (nowPlayingRef.current) return;
+          }
+
+          matchingRef.current = false;
           await requestMatch({ force: true, sessionSeed: true });
         } finally {
           trackChangeInFlightRef.current = false;
+          matchingRef.current = false;
+          setLoading(false);
         }
         return;
       }
@@ -1526,6 +1619,7 @@ export default function App() {
     },
     [
       abortSameMoodPrefetch,
+      applyMatch,
       audio,
       padMatchPosition,
       playPrefetchCandidate,
@@ -1909,6 +2003,26 @@ export default function App() {
     [changeTrack, resetSameMoodStability],
   );
 
+  const onGoHome = useCallback(() => {
+    matchSeqRef.current += 1;
+    matchingRef.current = false;
+    sessionAbortRef.current?.abort("home");
+    sessionAbortRef.current = null;
+    landingPreloadAbortRef.current?.abort("home");
+    landingPreloadAbortRef.current = null;
+    landingMatchRef.current = null;
+    landingPreloadRef.current = null;
+    setLandingHeaderCompact(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    audio.interruptPlayback();
+    playedTrackIdsRef.current.clear();
+    setLoading(false);
+    setSwitchingTrack(false);
+    setError(null);
+    setInfoPanel(null);
+    setNowPlaying(null);
+  }, [audio]);
+
   const onRewind = useCallback(() => {
     const pos = padMatchPosition();
     moodMonitor.userAction("replay", { v: pos.v, ar: pos.ar });
@@ -1941,12 +2055,30 @@ export default function App() {
 
   /** Compact header + tighter layout once the first track card can render. */
   const sessionLayoutActive = Boolean(nowPlaying);
+  const compactLayout = sessionLayoutActive || landingHeaderCompact;
   const onDismissFeatureTip = useCallback(() => {
     if (featureTip?.id === "matches") markMatchesDiscovered();
     dismissFeatureTip();
   }, [featureTip?.id, dismissFeatureTip, markMatchesDiscovered]);
 
-  const subtitleHidden = Boolean(loading || nowPlaying);
+  const subtitleHidden = Boolean(loading || nowPlaying || landingHeaderCompact);
+
+  useEffect(() => {
+    const SCROLL_COMPACT_THRESHOLD_PX = 40;
+    const syncLandingHeaderCompact = () => {
+      setLandingHeaderCompact(window.scrollY > SCROLL_COMPACT_THRESHOLD_PX);
+    };
+
+    syncLandingHeaderCompact();
+    window.addEventListener("scroll", syncLandingHeaderCompact, { passive: true });
+    return () => window.removeEventListener("scroll", syncLandingHeaderCompact);
+  }, []);
+
+  useEffect(() => {
+    if (!nowPlaying) {
+      setLandingHeaderCompact(window.scrollY > 40);
+    }
+  }, [nowPlaying]);
 
   return (
     <>
@@ -1966,7 +2098,7 @@ export default function App() {
       />
       <div
         className={`moony-app-shell mx-auto flex min-h-screen flex-col px-6${
-          sessionLayoutActive ? " moony-app--playing" : " moony-app--landing"
+          compactLayout ? " moony-app--playing" : " moony-app--landing"
         }${nowPlaying ? " moony-app--has-dock" : ""}${
           showSyncedMatches && nowPlaying ? " moony-app--has-matches" : ""
         }`}
@@ -1974,11 +2106,20 @@ export default function App() {
       >
       <header
         className={`moony-header${subtitleHidden ? " moony-header--subtitle-hidden" : ""}${
-          sessionLayoutActive ? " moony-header--playing" : ""
+          compactLayout ? " moony-header--playing" : ""
         }`}
       >
         <div className="moony-header-brand">
-          <h1 className="moony-title moony-header-title tracking-tight">moony</h1>
+          <h1 className="moony-title moony-header-title tracking-tight">
+            <button
+              type="button"
+              className="moony-header-title-btn"
+              onClick={onGoHome}
+              aria-label="Back to start"
+            >
+              moony
+            </button>
+          </h1>
           <p className="moony-header-subtitle px-2">
             <span className="moony-header-subtitle-line">the emotional intelligence API</span>
             <span className="moony-header-subtitle-line">for music catalogs</span>
@@ -1988,7 +2129,7 @@ export default function App() {
 
       <section
         className={`moony-player-section mx-auto flex flex-col items-center${
-          sessionLayoutActive ? " moony-player-section--playing" : ""
+          compactLayout ? " moony-player-section--playing" : ""
         }`}
         style={{ width: FLUID_PAD_WRAPPER_PX }}
       >
@@ -1998,24 +2139,21 @@ export default function App() {
         >
           <FluidEmotionPad
             ref={padRef}
+            showPointer={Boolean(nowPlaying)}
             interactionDisabled={switchingTrack}
-            playbackEnvelopeActive={Boolean(nowPlaying && audio.isPlaying && !switchingTrack)}
+            playbackEnvelopeActive={Boolean(nowPlaying && audio.isPlaying)}
             sampleLinearPeak={audio.samplePlaybackLinearPeak}
             playbackBpm={nowPlaying?.bpm}
+            energyCurve={currentTimeline?.energy_curve}
+            energyCurveTimestampsMs={currentTimeline?.energy_curve_timestamps_ms}
+            samplePlaybackMs={() => playbackMsRef.current}
             onPositionChange={onPositionChange}
             onDragStart={onPadDragStart}
             onDragEnd={onPadDragEnd}
             onPositionSettled={onPadPositionSettled}
           />
-          {switchingTrack && nowPlaying ? (
-            <div
-              className="pointer-events-none absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
-              role="status"
-              aria-label="Loading track"
-              data-testid="pad-track-switch-loader"
-            >
-              <span className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white/90" />
-            </div>
+          {(loading && !nowPlaying) || (switchingTrack && nowPlaying) ? (
+            <PadOrbitLoader />
           ) : null}
           {nowPlaying && padLyrics ? (
             <LyricsScroller
@@ -2040,20 +2178,16 @@ export default function App() {
               title={loading ? "Loading…" : "Play"}
               disabled={loading || switchingTrack}
               onClick={onStartListening}
-              className="absolute left-1/2 top-1/2 z-10 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[6px] border-white/90 bg-moony-accent text-white shadow-[0_8px_32px_rgba(0,0,0,0.45)] transition hover:scale-[1.03] hover:opacity-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+              className="moony-start-play-btn absolute left-1/2 top-1/2 z-10 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[5px] border-white/90 bg-[rgba(18,18,22,0.82)] text-white shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md transition-[background-color,border-color] hover:border-white hover:bg-[rgba(28,28,34,0.88)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? (
-                <span className="h-10 w-10 animate-spin rounded-full border-4 border-white/30 border-t-white" />
-              ) : (
-                <svg
-                  className="ml-1.5 h-14 w-14 shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden
-                >
-                  <path d="M8 5v14l11-7L8 5z" />
-                </svg>
-              )}
+              <svg
+                className="ml-1.5 h-14 w-14 shrink-0"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden
+              >
+                <path d="M8 5v14l11-7L8 5z" />
+              </svg>
             </button>
           ) : null}
         </div>

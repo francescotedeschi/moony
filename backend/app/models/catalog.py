@@ -30,6 +30,11 @@ class Segment(BaseModel):
     essentia_emotion_label: str = ""
     embedding: list[float] = Field(default_factory=list)
     bar_count: int | None = None
+    cyanite_v: float | None = None
+    cyanite_ar: float | None = None
+    cyanite_mood_tag: str = ""
+    cyanite_mood_score: float = 0.0
+    cyanite_mood_scores: dict[str, float] = Field(default_factory=dict)
 
 
 class Transition(BaseModel):
@@ -73,8 +78,12 @@ class Track(BaseModel):
     motion: TrackMotion | None = None
     """Precomputed track loudness (instant YouTube-style gain at playback)."""
     loudness: TrackLoudness | None = None
-    """Mood mix [calm, joy, energy, tension, sad] — segment counts / total segments."""
+    """Mood mix [energetic, happy, chilled, romantic, sad, dark, tense] — segment counts / total segments."""
     mood_distribution: list[float] = Field(default_factory=list)
+    """Cyanite energy curve — explicit energy [0, 1] sampled at energy_curve_timestamps_ms."""
+    energy_curve: list[float] = Field(default_factory=list)
+    """Millisecond timestamps for each energy_curve sample."""
+    energy_curve_timestamps_ms: list[int] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _ensure_mood_distribution(self) -> "Track":

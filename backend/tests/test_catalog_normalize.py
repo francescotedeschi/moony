@@ -83,10 +83,43 @@ def test_normalize_moodpad_v17_sections():
     t = cat.tracks[0]
     assert len(t.segments) == 2
     assert t.segments[0].label == "intro"
-    assert t.segments[0].emotion_label == "calm"
+    assert t.segments[0].emotion_label == "chilled"   # calm → chilled (7-zone remap)
     assert t.segments[0].moss_emotion_label == "calm"
     assert t.segments[1].label == "chorus"
     assert t.segments[1].v == 0.8
+
+
+def test_energy_curve_extended_to_track_bounds():
+    """Cyanite samples start at 15s — synthetic points at 0 and duration cover intro/outro."""
+    sample = {
+        "catalog_schema": "moodpad-catalog-musicathon",
+        "version": "1.7",
+        "tracks": [
+            {
+                "id": "jamendo_test",
+                "title": "Test",
+                "artist": "Artist",
+                "duration_sec": 208.0,
+                "primary_emotion": "calm",
+                "jamendo": {"audio_url": "https://example.com/track.mp3", "tags": []},
+                "sections": [
+                    {"start_sec": 0.0, "end_sec": 10.0, "structure_label": "intro", "emotion_label": "calm"},
+                    {"start_sec": 10.0, "end_sec": 192.0, "structure_label": "verse", "emotion_label": "calm"},
+                    {"start_sec": 192.0, "end_sec": 208.0, "structure_label": "outro", "emotion_label": "calm"},
+                ],
+                "cyanite": {
+                    "energy_curve": [0.18, 0.45, 0.30],
+                    "segment_timestamps_sec": [15.0, 90.0, 180.0],
+                },
+            }
+        ],
+    }
+    t = normalize_catalog(sample).tracks[0]
+    assert t.energy_curve_timestamps_ms[0] == 0
+    assert t.energy_curve[0] == 0.18
+    assert t.energy_curve_timestamps_ms[-1] == 208_000
+    assert t.energy_curve[-1] == 0.30
+    assert len(t.energy_curve) == 5
 
 
 def test_load_user_catalog_if_present():

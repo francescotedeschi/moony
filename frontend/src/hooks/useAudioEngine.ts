@@ -42,6 +42,19 @@ type BusGraph = {
   limiter: DynamicsCompressorNode;
 };
 
+type PreloadedTrack = {
+  url: string;
+  startMs: number;
+  seekAfterPlayMs: number;
+  bus: Bus;
+};
+
+export type PreloadTrackOptions = {
+  url: string;
+  startMs?: number;
+  youtubePlaybackGain?: number;
+};
+
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
@@ -204,6 +217,8 @@ export function useAudioEngine() {
   const playbackStoreRef = useRef(createPlaybackStore());
   /** Incoming bus time during crossfade — keeps pad lyrics on the new track clock. */
   const lyricsPlaybackStoreRef = useRef(createPlaybackStore());
+  const preloadedRef = useRef<PreloadedTrack | null>(null);
+  const preloadInFlightRef = useRef<Promise<void> | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolumeState] = useState(1);
@@ -536,9 +551,10 @@ export function useAudioEngine() {
       volume: number,
       epoch: number,
       catalogGain?: number,
+      opts?: { forceSeek?: boolean },
     ): Promise<{ el: HTMLAudioElement; seekAfterPlayMs: number }> => {
       const el = getBus(bus);
-      const deferSeek = startMs > DEFER_SEEK_MS;
+      const deferSeek = !opts?.forceSeek && startMs > DEFER_SEEK_MS;
       const initialMs = deferSeek ? 0 : startMs;
 
       await warmAudioUrl(url, startMs);
@@ -603,6 +619,7 @@ export function useAudioEngine() {
   }, [stopCrossfadeLoop]);
 
   const interruptPlayback = useCallback(() => {
+    preloadedRef.current = null;
     bumpPlaybackGeneration();
     audioARef.current?.pause();
     audioBRef.current?.pause();
@@ -613,8 +630,135 @@ export function useAudioEngine() {
     setBusGain(active === "A" ? "B" : "A", 0);
   }, [bumpPlaybackGeneration, stopCrossfadeLoop, setBusGain]);
 
+  const isTrackPreloaded = useCallback((url: string, startMs: number): boolean => {
+    const preloaded = preloadedRef.current;
+    return Boolean(
+      preloaded &&
+        preloaded.url === url &&
+        preloaded.startMs === startMs &&
+        busUrlRef.current[preloaded.bus] === url,
+    );
+  }, []);
+
+  const awaitPreloadFor = useCallback(
+    async (url: string, startMs: number): Promise<boolean> => {
+      if (isTrackPreloaded(url, startMs)) return true;
+      if (preloadInFlightRef.current) {
+        await preloadInFlightRef.current.catch(() => {});
+      }
+      return isTrackPreloaded(url, startMs);
+    },
+    [isTrackPreloaded],
+  );
+
+  const ensureSeekBeforePlay = useCallback(
+    async (el: HTMLAudioElement, targetMs: number) => {
+      if (targetMs <= 0) return;
+      const duration =
+        Number.isFinite(el.duration) && el.duration > 0 ? el.duration : undefined;
+      const targetSec = Math.max(
+        0,
+        Math.min(targetMs / 1000, duration ?? targetMs / 1000),
+      );
+      if (Math.abs(el.currentTime - targetSec) < 0.35) return;
+      try {
+        await seekTo(el, targetSec);
+      } catch {
+        /* keep prepared position */
+      }
+    },
+    [],
+  );
+
+  const preloadTrack = useCallback(
+    async ({ url, startMs = 0, youtubePlaybackGain }: PreloadTrackOptions) => {
+      if (preloadInFlightRef.current) {
+        await preloadInFlightRef.current.catch(() => {});
+        if (isTrackPreloaded(url, startMs)) return;
+      }
+
+      const run = async () => {
+        const epoch = playEpochRef.current;
+        ensureElements();
+        ensureAudioGraph();
+        activeRef.current = "A";
+        const inactive = getBus("B");
+        inactive.pause();
+        setBusGain("B", 0);
+        busUrlRef.current.A = url;
+
+        const { seekAfterPlayMs } = await prepareOnBus(
+          "A",
+          url,
+          startMs,
+          1,
+          epoch,
+          youtubePlaybackGain,
+          { forceSeek: true },
+        );
+        if (epoch !== playEpochRef.current) return;
+
+        preloadedRef.current = { url, startMs, seekAfterPlayMs, bus: "A" };
+        setHasTrack(true);
+        setIsPlaying(false);
+        syncPlaybackClock();
+      };
+
+      const task = run().finally(() => {
+        if (preloadInFlightRef.current === task) {
+          preloadInFlightRef.current = null;
+        }
+      });
+      preloadInFlightRef.current = task;
+      await task;
+    },
+    [ensureAudioGraph, ensureElements, isTrackPreloaded, prepareOnBus, setBusGain, syncPlaybackClock],
+  );
+
   const play = useCallback(
     async ({ url, startMs = 0, youtubePlaybackGain, onPlayStart }: PlayOptions) => {
+      const preloaded = preloadedRef.current;
+      if (
+        preloaded &&
+        preloaded.url === url &&
+        preloaded.startMs === startMs &&
+        busUrlRef.current[preloaded.bus] === url
+      ) {
+        const el = getBus(preloaded.bus);
+        if (hasUsableMetadata(el)) {
+          const epoch = playEpochRef.current;
+          preloadedRef.current = null;
+          ensureAudioGraph();
+          await resumeAudioContext();
+          activeRef.current = preloaded.bus;
+          setBusGain(preloaded.bus, 1);
+          setBusGain(preloaded.bus === "A" ? "B" : "A", 0);
+
+          await ensureSeekBeforePlay(
+            el,
+            preloaded.seekAfterPlayMs > 0 ? preloaded.seekAfterPlayMs : preloaded.startMs,
+          );
+
+          try {
+            await el.play();
+          } catch (err) {
+            throw err instanceof Error ? err : new Error("Audio play failed");
+          }
+          if (epoch !== playEpochRef.current) {
+            el.pause();
+            return;
+          }
+
+          el.playbackRate = 1;
+          unlockedRef.current = true;
+          setHasTrack(true);
+          setIsPlaying(true);
+          onPlayStart?.();
+          syncPlaybackClock();
+          return;
+        }
+      }
+
       bumpPlaybackGeneration();
       const epoch = playEpochRef.current;
       ensureElements();
@@ -632,8 +776,11 @@ export function useAudioEngine() {
         1,
         epoch,
         youtubePlaybackGain,
+        { forceSeek: true },
       );
       if (epoch !== playEpochRef.current) return;
+
+      await ensureSeekBeforePlay(el, seekAfterPlayMs > 0 ? seekAfterPlayMs : startMs);
 
       try {
         await el.play();
@@ -645,20 +792,6 @@ export function useAudioEngine() {
         return;
       }
 
-      if (seekAfterPlayMs > 0) {
-        const duration =
-          Number.isFinite(el.duration) && el.duration > 0 ? el.duration : undefined;
-        const targetSec = Math.max(
-          0,
-          Math.min(seekAfterPlayMs / 1000, duration ?? seekAfterPlayMs / 1000),
-        );
-        try {
-          await seekTo(el, targetSec);
-        } catch {
-          /* keep playing from start */
-        }
-      }
-
       el.playbackRate = 1;
       unlockedRef.current = true;
       setHasTrack(true);
@@ -666,7 +799,7 @@ export function useAudioEngine() {
       onPlayStart?.();
       syncPlaybackClock();
     },
-    [ensureAudioGraph, ensureElements, prepareOnBus, resumeAudioContext, setBusGain, syncPlaybackClock],
+    [ensureAudioGraph, ensureElements, ensureSeekBeforePlay, prepareOnBus, resumeAudioContext, setBusGain, syncPlaybackClock],
   );
 
   const crossfadeTo = useCallback(
@@ -705,12 +838,18 @@ export function useAudioEngine() {
         0,
         epoch,
         youtubePlaybackGain,
+        { forceSeek: true },
       );
       if (epoch !== playEpochRef.current) return;
 
       incoming.playbackRate = plan.playbackRateStart;
       setBusGain(inBus, 0);
       outEl.playbackRate = 1;
+
+      await ensureSeekBeforePlay(
+        incoming,
+        seekAfterPlayMs > 0 ? seekAfterPlayMs : startMs,
+      );
 
       try {
         await incoming.play();
@@ -720,22 +859,6 @@ export function useAudioEngine() {
       if (epoch !== playEpochRef.current) {
         incoming.pause();
         return;
-      }
-
-      if (seekAfterPlayMs > 0) {
-        const duration =
-          Number.isFinite(incoming.duration) && incoming.duration > 0
-            ? incoming.duration
-            : undefined;
-        const targetSec = Math.max(
-          0,
-          Math.min(seekAfterPlayMs / 1000, duration ?? seekAfterPlayMs / 1000),
-        );
-        try {
-          await seekTo(incoming, targetSec);
-        } catch {
-          /* start of track is ok */
-        }
       }
 
       const fadeMs = Math.max(600, plan.crossfadeMs);
@@ -800,6 +923,7 @@ export function useAudioEngine() {
       bumpPlaybackGeneration,
       ensureAudioGraph,
       ensureElements,
+      ensureSeekBeforePlay,
       prepareOnBus,
       resumeAudioContext,
       setBusGain,
@@ -877,6 +1001,9 @@ export function useAudioEngine() {
   return {
     play,
     crossfadeTo,
+    preloadTrack,
+    awaitPreloadFor,
+    isTrackPreloaded,
     interruptPlayback,
     bumpPlaybackGeneration,
     pause,

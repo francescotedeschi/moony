@@ -1,10 +1,12 @@
 import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { EMOTION_ZONES } from "../lib/emotions";
-import { MotionCurveOverlay } from "./MotionCurveOverlay";
+import { MotionCurveOverlay, type CySegmentPoint } from "./MotionCurveOverlay";
 import {
   formatMs,
   isTimelineBarReady,
   segmentAtTime,
+  segmentCyaniteMoodLabel,
+  segmentCyaniteMoodColor,
   segmentDescriptionLines,
   segmentHasInspectData,
   segmentIndexAtTime,
@@ -78,6 +80,19 @@ function SegmentRow({
       ? durationMs
       : timeline.segments.reduce((max, s) => Math.max(max, s.t_end), 0);
 
+  // Cyanite energy spline — built from track-level energy_curve + timestamps.
+  const cyPoints = useMemo<CySegmentPoint[] | undefined>(() => {
+    const ec = timeline.energy_curve;
+    const ts = timeline.energy_curve_timestamps_ms;
+    if (!ec || !ts || ec.length < 2 || ts.length < 2) return undefined;
+    const len = Math.min(ec.length, ts.length);
+    const pts: CySegmentPoint[] = [];
+    for (let i = 0; i < len; i++) {
+      pts.push({ t_ms: ts[i]!, energy: ec[i]! });
+    }
+    return pts;
+  }, [timeline.energy_curve, timeline.energy_curve_timestamps_ms]);
+
   const Wrapper = onClick ? "button" : "div";
 
   return (
@@ -108,16 +123,18 @@ function SegmentRow({
         </div>
       ) : null}
       <div
-        className={`timeline-track-shell ${isMinimal ? "timeline-track-shell--minimal" : ""}`}
+        className="timeline-row-track-area"
         onMouseLeave={() => setHoveredSegIdx(null)}
       >
         {showSegmentInspect && hoveredSegIdx !== null ? (
           <SegmentInspectOverlay
             seg={timeline.segments[hoveredSegIdx]!}
-            durationMs={effectiveDurationMs}
             segmentIndex={hoveredSegIdx}
           />
         ) : null}
+        <div
+          className={`timeline-track-shell ${isMinimal ? "timeline-track-shell--minimal" : ""}`}
+        >
         <div className="timeline-track-inner">
         {timeline.segments.map((seg, idx) => (
           <SegmentBlock
@@ -153,6 +170,7 @@ function SegmentRow({
         <MotionCurveOverlay
           points={timeline.motion_preview}
           durationMs={effectiveDurationMs}
+          cyPoints={cyPoints}
         />
         {playheadMs !== undefined && effectiveDurationMs > 0 ? (
           <div
@@ -167,6 +185,7 @@ function SegmentRow({
             title="Synced segment entry"
           />
         ) : null}
+        </div>
       </div>
     </Wrapper>
   );
@@ -174,35 +193,29 @@ function SegmentRow({
 
 function SegmentInspectOverlay({
   seg,
-  durationMs,
   segmentIndex,
 }: {
   seg: MossSegment;
-  durationMs: number;
   segmentIndex: number;
 }) {
-  if (durationMs <= 0) return null;
-  const left = (seg.t_start / durationMs) * 100;
-  const width = Math.max(0.4, ((seg.t_end - seg.t_start) / durationMs) * 100);
-  const center = left + width / 2;
+  const cyaniteMood = segmentCyaniteMoodLabel(seg);
 
   return (
     <div
-      className="pointer-events-none absolute bottom-full z-40 mb-1.5 flex justify-center"
-      style={{ left: `${center}%`, transform: "translateX(-50%)" }}
+      className="timeline-segment-inspect"
       role="tooltip"
       data-testid={`segment-inspect-${segmentIndex}`}
     >
-      <div className="w-[min(24rem,calc(100vw-2.5rem))] rounded-lg border border-white/15 bg-black/92 px-3.5 py-3 shadow-2xl backdrop-blur-sm">
-        <p className="mb-1.5 text-[12px] font-medium uppercase tracking-wide text-white/40">
+      <div className="timeline-segment-inspect__panel">
+        <p className="timeline-segment-inspect__heading">
           {seg.label} · {formatMs(seg.t_start)}–{formatMs(seg.t_end)}
         </p>
-        <div className="space-y-1 text-[13px] leading-snug text-white/75">
+        <div className="timeline-segment-inspect__body">
           {seg.description?.trim() ? (
             segmentDescriptionLines(seg.description).map((line, i) => (
               <p
                 key={`${segmentIndex}-${i}`}
-                className={line.bold ? "font-semibold text-white/90" : undefined}
+                className={line.bold ? "timeline-segment-inspect__line--bold" : undefined}
               >
                 {line.text}
               </p>
@@ -211,6 +224,21 @@ function SegmentInspectOverlay({
             <p>No MOSS description.</p>
           )}
         </div>
+        {cyaniteMood ? (
+          <p
+            className="timeline-segment-inspect__cyanite"
+            data-testid={`segment-cyanite-mood-${segmentIndex}`}
+          >
+            <span className="timeline-segment-inspect__cyanite-label">Cyanite</span>
+            <span className="timeline-segment-inspect__cyanite-sep"> · </span>
+            <span
+              className="timeline-segment-inspect__cyanite-mood"
+              style={{ color: segmentCyaniteMoodColor(seg) }}
+            >
+              {cyaniteMood}
+            </span>
+          </p>
+        ) : null}
       </div>
     </div>
   );

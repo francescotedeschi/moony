@@ -25,6 +25,8 @@ export type EmotionPadHandle = {
   clearPlaybackDrive: () => void;
   lockFilledToIntent: () => void;
   resumePlaybackDrive: () => void;
+  /** Prime envelope-driven fluid flow at session / track start. */
+  kickstartPlaybackEnvelope?: () => void;
   /** Move the user pointer to a pad V/A target. */
   setUserTarget: (v: number, ar: number) => void;
   /** White-dot user target (not live song shadow). */

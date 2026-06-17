@@ -14,53 +14,71 @@ export type EmotionZone = {
 
 export const EMOTION_ZONES: EmotionZone[] = [
   {
-    name: "Calm",
-    v: 0,
-    ar: -0.8,
-    intent: 7,
-    rgb: [34, 197, 94],
-    dotClass: "bg-emerald-400",
-    buttonClass: "border-emerald-400/40 text-emerald-300 hover:border-emerald-400",
-  },
-  {
-    name: "Joy",
-    v: 0.8,
-    ar: 0.6,
-    intent: 2,
-    rgb: [250, 204, 21],
-    dotClass: "bg-yellow-400",
-    buttonClass: "border-yellow-400/40 text-yellow-200 hover:border-yellow-400",
-  },
-  {
-    name: "Energy",
-    v: 0.2,
-    ar: 0.9,
+    name: "Energetic",
+    v: 0.24,
+    ar: 0.67,
     intent: 3,
     rgb: [239, 68, 68],
     dotClass: "bg-red-400",
     buttonClass: "border-red-400/40 text-red-300 hover:border-red-400",
   },
   {
-    name: "Tension",
-    v: -0.5,
-    ar: 0.7,
-    intent: 4,
-    rgb: [249, 115, 22],
-    dotClass: "bg-orange-400",
-    buttonClass: "border-orange-400/40 text-orange-300 hover:border-orange-400",
+    name: "Happy",
+    v: 0.65,
+    ar: 0.25,
+    intent: 2,
+    rgb: [250, 204, 21],
+    dotClass: "bg-yellow-400",
+    buttonClass: "border-yellow-400/40 text-yellow-200 hover:border-yellow-400",
+  },
+  {
+    name: "Chilled",
+    v: 0.29,
+    ar: -0.18,
+    intent: 8,
+    rgb: [34, 197, 94],
+    dotClass: "bg-emerald-400",
+    buttonClass: "border-emerald-400/40 text-emerald-300 hover:border-emerald-400",
+  },
+  {
+    name: "Romantic",
+    v: 0.10,
+    ar: -0.10,
+    intent: 9,
+    rgb: [244, 114, 182],
+    dotClass: "bg-pink-400",
+    buttonClass: "border-pink-400/40 text-pink-300 hover:border-pink-400",
   },
   {
     name: "Sad",
-    v: -0.7,
-    ar: -0.5,
+    v: -0.27,
+    ar: -0.14,
     intent: 6,
     rgb: [168, 85, 247],
     dotClass: "bg-violet-400",
     buttonClass: "border-violet-400/40 text-violet-300 hover:border-violet-400",
   },
+  {
+    name: "Dark",
+    v: -0.28,
+    ar: 0.13,
+    intent: 4,
+    rgb: [100, 116, 139],
+    dotClass: "bg-slate-400",
+    buttonClass: "border-slate-400/40 text-slate-300 hover:border-slate-400",
+  },
+  {
+    name: "Tense",
+    v: -0.50,
+    ar: 0.70,
+    intent: 10,
+    rgb: [249, 115, 22],
+    dotClass: "bg-orange-400",
+    buttonClass: "border-orange-400/40 text-orange-300 hover:border-orange-400",
+  },
 ];
 
-const SESSION_SEED_MOOD_NAMES = new Set(["Calm", "Joy", "Energy"]);
+const SESSION_SEED_MOOD_NAMES = new Set(["Chilled", "Happy", "Energetic"]);
 
 /** Random opener mood for the first track of a browser session. */
 export function pickRandomSessionSeedTarget(): { v: number; ar: number } {
@@ -71,12 +89,19 @@ export function pickRandomSessionSeedTarget(): { v: number; ar: number } {
 
 /** Solid bar colors — one per pad mood (no V/A gradients). */
 export const MOOD_COLORS: Record<string, string> = {
-  calm: "rgb(34, 197, 94)",
-  joy: "rgb(250, 204, 21)",
-  energy: "rgb(239, 68, 68)",
-  tension: "rgb(249, 115, 22)",
-  sad: "rgb(168, 85, 247)",
-  neutral: "rgb(100, 116, 139)",
+  energetic: "rgb(239, 68, 68)",
+  happy:     "rgb(250, 204, 21)",
+  chilled:   "rgb(34, 197, 94)",
+  romantic:  "rgb(244, 114, 182)",
+  sad:       "rgb(168, 85, 247)",
+  dark:      "rgb(100, 116, 139)",
+  tense:     "rgb(249, 115, 22)",
+  neutral:   "rgb(71, 85, 105)",
+  // Legacy aliases — kept for backward compat with MOSS labels
+  calm:      "rgb(34, 197, 94)",
+  joy:       "rgb(250, 204, 21)",
+  energy:    "rgb(239, 68, 68)",
+  tension:   "rgb(249, 115, 22)",
 };
 
 export function moodColorForName(name: string): string {
@@ -124,14 +149,48 @@ export function vaDistance(a: VA, b: VA): number {
   return Math.hypot(a.v - b.v, a.ar - b.ar);
 }
 
+/** Vignette multiplier for pad radius (0 = center, 1 = edge). */
+export function moodpadDiscEdgeVignette(edge: number): number {
+  return moodpadEdgeVignette(edge);
+}
+
+function moodpadEdgeVignette(edge: number): number {
+  return 0.84 + 0.16 * (1 - Math.min(1, edge) ** 1.5);
+}
+
 function emotionRgbWithVignette(v: number, ar: number, rgb: [number, number, number]): [number, number, number] {
-  const edge = Math.min(1, Math.hypot(v, ar));
-  const vignette = 0.72 + 0.28 * (1 - edge ** 1.6);
+  const edge = Math.hypot(v, ar);
+  const vignette = moodpadEdgeVignette(edge);
   return [
     Math.round(rgb[0] * vignette),
     Math.round(rgb[1] * vignette),
     Math.round(rgb[2] * vignette),
   ];
+}
+
+/** Push RGB away from luminance — factor > 1 increases perceived saturation. */
+function boostRgbSaturation(rgb: [number, number, number], factor: number): [number, number, number] {
+  const luma = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+  return [
+    Math.round(Math.max(0, Math.min(255, luma + (rgb[0] - luma) * factor))),
+    Math.round(Math.max(0, Math.min(255, luma + (rgb[1] - luma) * factor))),
+    Math.round(Math.max(0, Math.min(255, luma + (rgb[2] - luma) * factor))),
+  ];
+}
+
+function boostRgbBrightness(rgb: [number, number, number], factor: number): [number, number, number] {
+  return [
+    Math.round(Math.max(0, Math.min(255, rgb[0] * factor))),
+    Math.round(Math.max(0, Math.min(255, rgb[1] * factor))),
+    Math.round(Math.max(0, Math.min(255, rgb[2] * factor))),
+  ];
+}
+
+const MOODPAD_COLOR_SATURATION = 1.72;
+const MOODPAD_COLOR_BRIGHTNESS = 1.14;
+
+function finishMoodpadRgb(rgb: [number, number, number]): [number, number, number] {
+  return boostRgbBrightness(boostRgbSaturation(rgb, MOODPAD_COLOR_SATURATION), MOODPAD_COLOR_BRIGHTNESS);
 }
 
 function catalogShareForZone(
@@ -177,7 +236,9 @@ export function blendEmotionColor(
     return blendEmotionColor(v, ar);
   }
 
-  return [Math.round(r / wSum), Math.round(g / wSum), Math.round(b / wSum)];
+  return finishMoodpadRgb(
+    [Math.round(r / wSum), Math.round(g / wSum), Math.round(b / wSum)],
+  );
 }
 
 /** Colored mood disc radius ratio on the legacy pad canvas. */

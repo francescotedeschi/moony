@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { EMOTION_ZONES, pickRandomSessionSeedTarget } from "./emotions";
 
 describe("pickRandomSessionSeedTarget", () => {
-  it("returns a pad target for Calm, Joy, or Energy", () => {
+  it("returns a pad target for Chilled, Happy, or Energetic", () => {
     const allowed = EMOTION_ZONES.filter((z) =>
-      ["Calm", "Joy", "Energy"].includes(z.name),
+      ["Chilled", "Happy", "Energetic"].includes(z.name),
     ).map((z) => `${z.v},${z.ar}`);
 
     for (let i = 0; i < 20; i += 1) {

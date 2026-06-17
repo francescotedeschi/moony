@@ -44,8 +44,8 @@ async def match_track(body: MatchRequest) -> MatchResponse:
     excludes = set(body.exclude_ids)
     if body.session_seed:
         mood = emotion_label_for_va(body.position)
-        if mood not in {"calm", "joy", "energy"}:
-            mood = random.choice(["calm", "joy", "energy"])
+        if mood not in {"chilled", "happy", "energetic"}:
+            mood = random.choice(["chilled", "happy", "energetic"])
         result = find_session_seed(cat.tracks, excludes, mood, play_counts=play_counts)
     elif body.same_mood_handoff:
         result = find_best_match(

@@ -115,7 +115,7 @@ def test_same_track_jumps_forward_to_joy_region():
     )
     assert result is not None
     track, _seg, _idx, _score, start_ms, entry_va, _md, _mq, el = result
-    assert el == "joy"
+    assert el == "happy"
     assert track.id == current.id
     assert start_ms >= 4000
     assert entry_va.v > 0.35
@@ -141,7 +141,7 @@ def test_find_best_match_joy_from_sad_playback():
     )
     assert result is not None
     _track, _seg, _idx, _score, start_ms, entry_va, _md, _mq, el = result
-    assert el == "joy"
+    assert el == "happy"
     assert entry_va.v > 0.35
     assert start_ms >= 4000
 
@@ -160,7 +160,7 @@ def test_forward_search_blends_motion_at_next_section():
         current_track=track,
         current_t_ms=4500,
     )
-    assert label == "joy"
+    assert label == "happy"
     assert search.v > 0.5
 
 
@@ -181,7 +181,7 @@ def test_same_track_match_prefers_upcoming_section_motion():
     )
     assert result is not None
     _t, _s, _i, _sc, start_ms, entry_va, _md, _mq, el = result
-    assert el == "joy"
+    assert el == "happy"
     assert start_ms >= 4000
     assert entry_va.v > 0.35
 
@@ -545,7 +545,7 @@ def test_skip_current_track_when_next_segment_is_outro():
     assert result is not None
     track, _seg, _idx, _score, start_ms, _va, _md, _mq, el = result
     assert track.id == "other_joy"
-    assert el == "joy"
+    assert el == "happy"
     assert start_ms >= 8000
     assert start_ms < 50_000
 
@@ -570,8 +570,8 @@ def test_find_best_match_uses_motion_entry():
     )
     assert result is not None
     track, seg, _idx, _score, start_ms, entry_va, _md, _mq, el = result
-    assert el == "joy"
-    assert seg.emotion_label == "joy"
+    assert el == "happy"
+    assert seg.emotion_label == "happy"
     assert track.id == "other"
     assert start_ms >= 0
     live = va_at_track_time(current, 1.0)

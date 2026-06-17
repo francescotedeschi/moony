@@ -75,5 +75,5 @@ def test_embedding_prefers_track_aligned_with_current_segment():
     )
     assert result is not None
     track, _seg, _idx, _score, _ms, _va, _md, _mq, el = result
-    assert el == "calm"
+    assert el == "chilled"
     assert track.id == "aligned"

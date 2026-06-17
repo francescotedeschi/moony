@@ -103,6 +103,12 @@ export type MossSegment = {
   description?: string;
   moss_emotion_label?: string;
   essentia_emotion_label?: string;
+  /** Dominant Cyanite mood tag for this section (e.g. dark, happy). */
+  cyanite_mood_tag?: string;
+  /** Cyanite continuous valence [-1, 1] — null when not analyzed */
+  cyanite_v?: number | null;
+  /** Cyanite continuous arousal [-1, 1] — null when not analyzed */
+  cyanite_ar?: number | null;
 };
 
 export type MotionPreviewPoint = { t_ms: number; y: number };
@@ -143,6 +149,10 @@ export type TrackTimeline = {
   has_motion?: boolean;
   musixmatch?: Record<string, unknown> | null;
   motion_preview?: MotionPreviewPoint[];
+  /** Cyanite explicit energy signal [0, 1] per sample. */
+  energy_curve?: number[];
+  /** Millisecond timestamps aligned 1:1 with energy_curve. */
+  energy_curve_timestamps_ms?: number[];
   segments: MossSegment[];
 };
 

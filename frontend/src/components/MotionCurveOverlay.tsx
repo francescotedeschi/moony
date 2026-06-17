@@ -2,19 +2,69 @@ import { useLayoutEffect, useRef } from "react";
 
 import type { MotionPreviewPoint } from "../lib/api";
 
+/** A single control-point for the Cyanite energy spline. */
+export type CySegmentPoint = {
+  /** Sample timestamp in milliseconds. */
+  t_ms: number;
+  /** Cyanite energy in [0, 1] — high = top of bar. */
+  energy: number;
+};
+
 type Props = {
   points?: MotionPreviewPoint[];
   durationMs: number;
+  /** Cyanite arousal sampled at segment midpoints — drawn as a second spline. */
+  cyPoints?: CySegmentPoint[];
 };
 
-export function MotionCurveOverlay({ points, durationMs }: Props) {
+// ---------------------------------------------------------------------------
+// Catmull-Rom spline helpers
+// ---------------------------------------------------------------------------
+
+type Pt = { x: number; y: number };
+
+/**
+ * Draw a Catmull-Rom spline through `pts` onto `ctx`.
+ * Uses ghost boundary points so the curve passes through every data point.
+ */
+function drawCatmullRom(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
+  if (pts.length < 2) return;
+
+  // Extend with ghost boundary points
+  const p = [
+    { x: 2 * pts[0].x - pts[1].x, y: 2 * pts[0].y - pts[1].y },
+    ...pts,
+    {
+      x: 2 * pts[pts.length - 1].x - pts[pts.length - 2].x,
+      y: 2 * pts[pts.length - 1].y - pts[pts.length - 2].y,
+    },
+  ];
+
+  ctx.moveTo(pts[0].x, pts[0].y);
+
+  for (let i = 1; i < p.length - 2; i++) {
+    // Catmull-Rom → Cubic Bezier conversion (tension = 1/6)
+    const cp1x = p[i].x + (p[i + 1].x - p[i - 1].x) / 6;
+    const cp1y = p[i].y + (p[i + 1].y - p[i - 1].y) / 6;
+    const cp2x = p[i + 1].x - (p[i + 2].x - p[i].x) / 6;
+    const cp2y = p[i + 1].y - (p[i + 2].y - p[i].y) / 6;
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p[i + 1].x, p[i + 1].y);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function MotionCurveOverlay({ points, durationMs, cyPoints }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const hasMoss = (points?.length ?? 0) >= 2;
+  const hasCy = (cyPoints?.length ?? 0) >= 2;
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !points?.length || durationMs <= 0 || points.length < 2) {
-      return;
-    }
+    if (!canvas || durationMs <= 0 || (!hasMoss && !hasCy)) return;
 
     const draw = () => {
       const rect = canvas.getBoundingClientRect();
@@ -33,37 +83,66 @@ export function MotionCurveOverlay({ points, durationMs }: Props) {
       const padY = h * 0.18;
       const innerH = h - padY * 2;
 
-      ctx.beginPath();
-      points.forEach((p, i) => {
-        const x = (p.t_ms / durationMs) * w;
-        const y = padY + (1 - p.y) * innerH;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
+      // ── MOSS motion curve (existing, straight line-to segments) ──────────
+      if (hasMoss && points) {
+        ctx.beginPath();
+        points.forEach((p, i) => {
+          const x = (p.t_ms / durationMs) * w;
+          const y = padY + (1 - p.y) * innerH;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
 
-      const grad = ctx.createLinearGradient(0, 0, w, 0);
-      grad.addColorStop(0, "rgba(167, 139, 250, 0.25)");
-      grad.addColorStop(0.45, "rgba(255, 255, 255, 0.92)");
-      grad.addColorStop(1, "rgba(124, 108, 255, 0.25)");
+        const grad = ctx.createLinearGradient(0, 0, w, 0);
+        grad.addColorStop(0, "rgba(167, 139, 250, 0.25)");
+        grad.addColorStop(0.45, "rgba(255, 255, 255, 0.92)");
+        grad.addColorStop(1, "rgba(124, 108, 255, 0.25)");
 
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = Math.max(1.2, 1.65 * dpr);
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      ctx.shadowColor = "rgba(167, 139, 250, 0.45)";
-      ctx.shadowBlur = 5 * dpr;
-      ctx.stroke();
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = Math.max(1.2, 1.65 * dpr);
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.shadowColor = "rgba(167, 139, 250, 0.45)";
+        ctx.shadowBlur = 5 * dpr;
+        ctx.stroke();
+      }
+
+      // ── Cyanite energy spline (Catmull-Rom, white) ─────────────────────
+      if (hasCy && cyPoints) {
+        // energy ∈ [0, 1] → y (top = high energy)
+        const pts: Pt[] = cyPoints.map((p) => ({
+          x: (p.t_ms / durationMs) * w,
+          y: padY + (1 - p.energy) * innerH,
+        }));
+
+        ctx.shadowColor = "rgba(255, 255, 255, 0.45)";
+        ctx.shadowBlur = 5 * dpr;
+
+        ctx.beginPath();
+        drawCatmullRom(ctx, pts);
+
+        const cyGrad = ctx.createLinearGradient(0, 0, w, 0);
+        cyGrad.addColorStop(0, "rgba(255, 255, 255, 0.35)");
+        cyGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.92)");
+        cyGrad.addColorStop(1, "rgba(255, 255, 255, 0.35)");
+
+        ctx.strokeStyle = cyGrad;
+        ctx.lineWidth = Math.max(1.0, 1.4 * dpr);
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+      }
     };
 
     draw();
     const ro = new ResizeObserver(draw);
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [points, durationMs]);
+  }, [points, durationMs, cyPoints, hasMoss, hasCy]);
 
-  if (!points?.length || durationMs <= 0 || points.length < 2) {
-    return null;
-  }
+  if (!hasMoss && !hasCy) return null;
 
   return (
     <canvas

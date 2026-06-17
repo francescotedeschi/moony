@@ -5,8 +5,21 @@ export function segmentHasInspectData(seg: MossSegment): boolean {
   return Boolean(
     seg.description?.trim() ||
       seg.moss_emotion_label?.trim() ||
-      seg.essentia_emotion_label?.trim(),
+      seg.essentia_emotion_label?.trim() ||
+      seg.cyanite_mood_tag?.trim(),
   );
+}
+
+export function segmentCyaniteMoodLabel(seg: MossSegment): string | null {
+  const tag = seg.cyanite_mood_tag?.trim();
+  if (!tag) return null;
+  return formatSegmentMoodLabel(tag);
+}
+
+export function segmentCyaniteMoodColor(seg: MossSegment): string {
+  const tag = seg.cyanite_mood_tag?.trim();
+  if (!tag) return moodColorForName("neutral");
+  return moodColorForName(tag);
 }
 
 export function formatSegmentMoodLabel(label: string | undefined): string {
@@ -243,18 +256,32 @@ export function syncedSegmentIndexByMotion(
 }
 
 const MOOD_LABEL: Record<string, string> = {
-  calm: "Calm",
-  joy: "Joy",
-  energy: "Energy",
-  energetic: "Energy",
-  tension: "Tension",
-  tense: "Tension",
-  sad: "Sad",
+  // 7 canonical Cyanite zones
+  energetic: "Energetic",
+  happy:     "Happy",
+  chilled:   "Chilled",
+  romantic:  "Romantic",
+  sad:       "Sad",
+  dark:      "Dark",
+  tense:     "Tense",
+  // Cyanite tags merged into primary zones
+  uplifting:  "Happy",
+  sexy:       "Romantic",
+  aggressive: "Tense",
+  scary:      "Tense",
+  epic:       "Happy",
+  ethereal:   "Chilled",
+  // Legacy MOSS labels → nearest new zone
+  calm:       "Chilled",
+  joy:        "Happy",
+  energy:     "Energetic",
+  tension:    "Tense",
+  // Additional MOSS synonyms
   melancholic: "Sad",
-  hopeful: "Joy",
-  warm: "Joy",
-  dreamy: "Calm",
-  playful: "Joy",
+  hopeful:     "Happy",
+  warm:        "Happy",
+  dreamy:      "Chilled",
+  playful:     "Happy",
 };
 
 /** Human-readable mood for a MOSS segment (catalog label or V/A zone). */

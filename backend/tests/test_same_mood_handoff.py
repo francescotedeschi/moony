@@ -148,7 +148,7 @@ def test_pad_joy_intent_restrict_mood_share_prefers_deep_joy():
         }
     )
     current = cat.tracks[0]
-    joy_intent = next(b.intent for b in EMOTION_BRANCHES if b.name == "Joy")
+    joy_intent = next(b.intent for b in EMOTION_BRANCHES if b.name == "Happy")
     intents = prefetch_intents(
         cat.tracks,
         VA(v=0.8, ar=0.6),

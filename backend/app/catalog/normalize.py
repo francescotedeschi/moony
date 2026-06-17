@@ -25,15 +25,67 @@ def _clamp(value: float) -> float:
     return max(-1.0, min(1.0, value))
 
 
-# Moony pad labels (5 zones) — used when segment has emotion_label but no V/A
+# Moony pad labels (7 Cyanite zones) — used when segment has emotion_label but no V/A.
+# Coordinates are centroids derived from cyanite_valence/arousal in catalog_V17.
 PAD_EMOTION_VA: dict[str, tuple[float, float]] = {
-    "calm": (0.0, -0.8),
-    "joy": (0.8, 0.6),
-    "energy": (0.2, 0.9),
-    "tension": (-0.5, 0.7),
-    "sad": (-0.7, -0.5),
-    "neutral": (0.0, 0.0),
+    # 7 canonical Cyanite zones
+    "energetic": (0.24, 0.67),
+    "happy":     (0.65, 0.25),
+    "chilled":   (0.29, -0.18),
+    "romantic":  (0.10, -0.10),
+    "sad":       (-0.27, -0.14),
+    "dark":      (-0.28, 0.13),
+    "tense":     (-0.50, 0.70),
+    "neutral":   (0.0, 0.0),
+    # Legacy 5-zone MOSS labels → nearest new zone (backward compat for tests/old data)
+    "calm":    (0.29, -0.18),   # → chilled
+    "joy":     (0.65, 0.25),    # → happy
+    "energy":  (0.24, 0.67),    # → energetic
+    "tension": (-0.50, 0.70),   # → tense
 }
+
+# Cyanite mood_tag → canonical 7-zone emotion_label.
+# Rare/overlapping tags are merged into the nearest primary zone.
+_CYANITE_TAG_TO_LABEL: dict[str, str] = {
+    "energetic": "energetic",
+    "happy":     "happy",
+    "uplifting": "happy",     # close to happy centroid
+    "chilled":   "chilled",
+    "calm":      "chilled",   # merge calm → chilled
+    "romantic":  "romantic",
+    "sexy":      "romantic",  # close to romantic centroid
+    "sad":       "sad",
+    "dark":      "dark",
+    "aggressive":"tense",     # maps to high-arousal negative zone
+    "scary":     "tense",
+    "epic":      "happy",     # center-high valence
+    "ethereal":  "chilled",   # low arousal, slightly positive
+}
+
+# Legacy MOSS emotion labels → nearest new zone label
+_MOSS_TO_LABEL: dict[str, str] = {
+    "calm":    "chilled",
+    "joy":     "happy",
+    "energy":  "energetic",
+    "tension": "tense",
+    "sad":     "sad",
+}
+
+
+def _resolve_emotion_label(raw: dict) -> str:
+    """Priority: cyanite_mood_tag > MOSS emotion_label > moss_emotion_label."""
+    cy_tag = str(raw.get("cyanite_mood_tag") or "").strip().lower()
+    if cy_tag:
+        mapped = _CYANITE_TAG_TO_LABEL.get(cy_tag)
+        if mapped:
+            return mapped
+
+    for field in ("emotion_label", "moss_emotion_label"):
+        raw_label = str(raw.get(field) or "").strip().lower()
+        if raw_label:
+            return _MOSS_TO_LABEL.get(raw_label, raw_label)
+
+    return ""
 
 # Maps catalog primary_emotion → Valence / Arousal (8 fetch buckets)
 EMOTION_VA: dict[str, tuple[float, float]] = {
@@ -108,6 +160,30 @@ def _normalize_segments(
         emb = raw.get("embedding")
         embedding = [float(x) for x in emb] if isinstance(emb, list) else []
 
+        raw_cy_v = raw.get("cyanite_valence")
+        raw_cy_ar = raw.get("cyanite_arousal")
+        cyanite_v = float(raw_cy_v) if raw_cy_v is not None else None
+        cyanite_ar = float(raw_cy_ar) if raw_cy_ar is not None else None
+        if cyanite_v is not None:
+            cyanite_v = max(-1.0, min(1.0, cyanite_v))
+        if cyanite_ar is not None:
+            cyanite_ar = max(-1.0, min(1.0, cyanite_ar))
+
+        raw_mood_scores = raw.get("cyanite_mood_scores")
+        mood_scores: dict[str, float] = (
+            {k: float(v) for k, v in raw_mood_scores.items() if isinstance(v, (int, float))}
+            if isinstance(raw_mood_scores, dict)
+            else {}
+        )
+        raw_mood_score = raw.get("cyanite_mood_score")
+        mood_score = float(raw_mood_score) if raw_mood_score is not None else 0.0
+        cy_tag = str(raw.get("cyanite_mood_tag") or "").strip().lower()
+
+        emotion_label = _resolve_emotion_label(raw)
+        if not emotion_label:
+            # Final fallback: derive from V/A via PAD_EMOTION_VA lookup handled upstream
+            emotion_label = str(raw.get("emotion_label") or raw.get("moss_emotion_label") or "").strip().lower()
+
         normalized.append(
             Segment(
                 t_start=t_start,
@@ -115,13 +191,16 @@ def _normalize_segments(
                 v=max(-1.0, min(1.0, v)),
                 ar=max(-1.0, min(1.0, ar)),
                 label=label,
-                emotion_label=str(
-                    raw.get("emotion_label") or raw.get("moss_emotion_label") or ""
-                ).strip().lower(),
+                emotion_label=emotion_label,
                 description=str(raw.get("description") or "").strip(),
                 moss_emotion_label=str(raw.get("moss_emotion_label") or "").strip().lower(),
                 essentia_emotion_label=str(raw.get("essentia_emotion_label") or "").strip().lower(),
                 embedding=embedding,
+                cyanite_v=cyanite_v,
+                cyanite_ar=cyanite_ar,
+                cyanite_mood_tag=_CYANITE_TAG_TO_LABEL.get(cy_tag, cy_tag),
+                cyanite_mood_score=mood_score,
+                cyanite_mood_scores=mood_scores,
             )
         )
         prev_end_ms = t_end
@@ -200,6 +279,29 @@ def _normalize_loudness(raw: Any) -> TrackLoudness | None:
     return None
 
 
+def _extend_energy_curve_bounds(
+    energy_curve: list[float],
+    energy_curve_timestamps_ms: list[int],
+    duration_ms: int,
+) -> tuple[list[float], list[int]]:
+    """Pad Cyanite energy_curve to full track span (intro/outro have no native samples)."""
+    if not energy_curve or not energy_curve_timestamps_ms or duration_ms <= 0:
+        return energy_curve, energy_curve_timestamps_ms
+
+    ec = list(energy_curve)
+    ts = list(energy_curve_timestamps_ms)
+    first_e, last_e = ec[0], ec[-1]
+
+    if ts[0] > 0:
+        ec.insert(0, first_e)
+        ts.insert(0, 0)
+    if ts[-1] < duration_ms:
+        ec.append(last_e)
+        ts.append(duration_ms)
+
+    return ec, ts
+
+
 def _normalize_musixmatch(raw: dict[str, Any] | None) -> MusixmatchRef | None:
     if not raw:
         return None
@@ -261,6 +363,25 @@ def _from_moodpad_export(data: dict[str, Any], version: str = "1.2") -> Catalog:
         ] or _build_transitions(segments)
 
         mood_distribution = compute_mood_distribution(segments)
+
+        cyanite_block = raw.get("cyanite") or {}
+        raw_ec = cyanite_block.get("energy_curve") or []
+        raw_ts = cyanite_block.get("segment_timestamps_sec") or []
+        energy_curve = [float(v) for v in raw_ec if v is not None]
+        energy_curve_timestamps_ms = [int(float(t) * 1000) for t in raw_ts if t is not None]
+        # Align lengths — drop trailing extras
+        min_len = min(len(energy_curve), len(energy_curve_timestamps_ms))
+        energy_curve = energy_curve[:min_len]
+        energy_curve_timestamps_ms = energy_curve_timestamps_ms[:min_len]
+        duration_ms = int(duration * 1000)
+        if segments:
+            duration_ms = max(duration_ms, max(s.t_end for s in segments))
+        energy_curve, energy_curve_timestamps_ms = _extend_energy_curve_bounds(
+            energy_curve,
+            energy_curve_timestamps_ms,
+            duration_ms,
+        )
+
         tracks.append(
             Track(
                 id=str(raw["id"]),
@@ -277,6 +398,8 @@ def _from_moodpad_export(data: dict[str, Any], version: str = "1.2") -> Catalog:
                 motion=_normalize_motion(raw.get("motion")),
                 loudness=_normalize_loudness(raw.get("loudness")),
                 mood_distribution=mood_distribution,
+                energy_curve=energy_curve,
+                energy_curve_timestamps_ms=energy_curve_timestamps_ms,
             )
         )
 

@@ -123,7 +123,7 @@ def test_embedding_penalty_demotes_similar_candidate():
     )
     assert result is not None
     track, _seg, _idx, _score, _ms, _va, _md, _mq, el = result
-    assert el == "calm"
+    assert el == "chilled"
     assert track.id == "other"
 
 
@@ -160,8 +160,8 @@ def test_prefetch_intents_respects_embedding_penalties():
         {"current"},
         current_track=playing,
         current_t_ms=2000,
-        intent_filter=frozenset({7}),
+        intent_filter=frozenset({8}),  # 8 = Chilled (was 7 = Calm)
         embedding_penalties=penalties,
     )
-    top = intents["7"][0]
+    top = intents["8"][0]
     assert top["track_id"] == "other"

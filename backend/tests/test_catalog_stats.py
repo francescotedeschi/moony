@@ -59,8 +59,9 @@ def test_catalog_stats_includes_mood_segment_mix():
     stats = store.stats()
 
     assert stats["segment_count"] == 3
-    assert stats["mood_labels"] == ["calm", "joy", "energy", "tension", "sad"]
-    assert stats["mood_segment_counts"][1] == 1  # joy
+    # 7-zone order: [energetic, happy, chilled, romantic, sad, dark, tense]
+    assert stats["mood_labels"] == ["energetic", "happy", "chilled", "romantic", "sad", "dark", "tense"]
+    assert stats["mood_segment_counts"][1] == 1  # happy (joy→happy)
     assert stats["mood_segment_counts"][4] == 2  # sad
     assert stats["mood_segment_share"][1] == round(1 / 3, 4)
     assert stats["dominant_mood_track_counts"][4] == 1

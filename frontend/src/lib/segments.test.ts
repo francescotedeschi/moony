@@ -9,7 +9,9 @@ import {
   needsEarlySameMoodHandoff,
   needsTimelineEnrich,
   SAME_MOOD_HANDOFF_PREP_MS,
+  segmentCyaniteMoodLabel,
   segmentCrossedBetween,
+  segmentHasInspectData,
 } from "./segments";
 
 const timeline: MossSegment[] = [
@@ -38,6 +40,21 @@ const enrichedTimeline: TrackTimeline = {
     { t_ms: 30_000, y: 0.5 },
   ],
 };
+
+describe("segment inspect metadata", () => {
+  it("exposes Cyanite dominant mood label", () => {
+    const seg: MossSegment = {
+      t_start: 0,
+      t_end: 10_000,
+      v: 0,
+      ar: 0,
+      label: "verse",
+      cyanite_mood_tag: "dark",
+    };
+    expect(segmentCyaniteMoodLabel(seg)).toBe("Dark");
+    expect(segmentHasInspectData(seg)).toBe(true);
+  });
+});
 
 describe("timeline display readiness", () => {
   it("treats prefetch stubs as not display-ready", () => {

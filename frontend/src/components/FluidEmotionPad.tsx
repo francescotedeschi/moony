@@ -8,6 +8,7 @@ import type { CatalogMoodSlice } from "../lib/catalogMoodSlices";
 import { loadCatalogMoodArcSlices } from "../lib/catalogMoodShares";
 import { PeakEnvelopeFollower } from "../lib/audioPeakMeter";
 import { bpmFlowIntensityScale } from "../lib/crossfadeTiming";
+import { energyAtTimeMs, flowIntensityScaleForEnergy } from "../lib/energyCurve";
 import { paintEmotionColorDisc } from "../lib/emotionColorDisc";
 
 const PAD_SIZE = 480;
@@ -45,6 +46,13 @@ type Props = {
   sampleLinearPeak?: () => number;
   /** Current track BPM — scales envelope flow intensity. */
   playbackBpm?: number;
+  /** Cyanite energy_curve samples for playback-driven flow intensity. */
+  energyCurve?: readonly number[];
+  energyCurveTimestampsMs?: readonly number[];
+  /** Current playback clock in ms (for energy sampling). */
+  samplePlaybackMs?: () => number;
+  /** Dotted mood pointer — visible only after session start. */
+  showPointer?: boolean;
 };
 
 function clampToDisc(dx: number, dy: number): Point {
@@ -91,6 +99,8 @@ function offsetToClient(offset: Point, padEl: HTMLElement): { clientX: number; c
 const ENVELOPE_FLOW_SPEED_PX = 1.05;
 /** Minimum meter excursion so flow stays visible between peaks. */
 const ENVELOPE_METER_FLOOR = 0.12;
+/** Boot level when playback starts — avoids a slow ramp from silence. */
+const ENVELOPE_BOOT_LEVEL = 0.34;
 
 /** Offset fluid emission toward the pad center based on peak-meter excursion (0..1). */
 function envelopeEmissionOffset(targetOffset: Point, meterT: number): Point {
@@ -128,6 +138,10 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
     playbackEnvelopeActive = false,
     sampleLinearPeak,
     playbackBpm = 120,
+    energyCurve,
+    energyCurveTimestampsMs,
+    samplePlaybackMs,
+    showPointer = false,
   },
   ref,
 ) {
@@ -153,11 +167,19 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
   playbackEnvelopeActiveRef.current = playbackEnvelopeActive;
   const sampleLinearPeakRef = useRef(sampleLinearPeak);
   sampleLinearPeakRef.current = sampleLinearPeak;
+  const energyCurveRef = useRef(energyCurve);
+  const energyCurveTimestampsMsRef = useRef(energyCurveTimestampsMs);
+  const samplePlaybackMsRef = useRef(samplePlaybackMs);
+  energyCurveRef.current = energyCurve;
+  energyCurveTimestampsMsRef.current = energyCurveTimestampsMs;
+  samplePlaybackMsRef.current = samplePlaybackMs;
+  const smoothedEnergyRef = useRef(0.5);
   const capturedPointerIdRef = useRef<number | null>(null);
   const dragFromPointerRef = useRef(false);
   const dragHintOriginRef = useRef<Point | null>(null);
   const dragHintReportedRef = useRef(false);
   const interactionDisabledRef = useRef(interactionDisabled);
+  const showPointerRef = useRef(showPointer);
   const [pointerPos, setPointerPos] = useState<Point>(DEFAULT_POINTER_OFFSET);
   const [moodLabelsVisible, setMoodLabelsVisible] = useState(false);
   const [overPointer, setOverPointer] = useState(false);
@@ -167,6 +189,14 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
   pointerPosRef.current = pointerPos;
   const catalogSlicesRef = useRef<readonly CatalogMoodSlice[] | null>(null);
   interactionDisabledRef.current = interactionDisabled;
+  showPointerRef.current = showPointer;
+
+  useEffect(() => {
+    if (showPointer) return;
+    overPointerStickyRef.current = false;
+    setOverPointer(false);
+    setMoodLabelsVisible(false);
+  }, [showPointer]);
 
   useEffect(() => {
     const colorDisc = colorDiscRef.current;
@@ -249,6 +279,7 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
       },
       lockFilledToIntent,
       resumePlaybackDrive,
+      kickstartPlaybackEnvelope,
       setUserTarget: (v: number, ar: number) => {
         const offset = vaToClampedPadOffset(v, ar);
         userTargetRef.current = offsetToVa(offset);
@@ -281,17 +312,23 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
     else simRef.current?.pointerMove(clientX, clientY, color);
   };
 
-  const syncSimEnvelopeFlow = (emitOffset: Point, meterT: number, bpm: number) => {
+  const syncSimEnvelopeFlow = (
+    emitOffset: Point,
+    meterT: number,
+    bpm: number,
+    energyScale = 1,
+  ) => {
     const pad = padRef.current;
     const sim = simRef.current;
     if (!pad || !sim) return;
     const { clientX, clientY } = offsetToClient(emitOffset, pad);
     const bpmScale = bpmFlowIntensityScale(bpm);
-    const effectiveMeter = Math.max(meterT, ENVELOPE_METER_FLOOR);
-    const flow = envelopeFlowTowardCenter(emitOffset, effectiveMeter, bpmScale);
+    const quantityScale = bpmScale * energyScale;
+    const effectiveMeter = Math.max(meterT, ENVELOPE_METER_FLOOR) * energyScale;
+    const flow = envelopeFlowTowardCenter(emitOffset, effectiveMeter, quantityScale);
     const color = fluidColorAt(pointerPosRef.current);
     sim.pointerEmitHold(clientX, clientY, color);
-    sim.pointerEmitFlow(clientX, clientY, flow.x, flow.y, color, bpmScale);
+    sim.pointerEmitFlow(clientX, clientY, flow.x, flow.y, color, quantityScale);
     // Keep perimeter wave running — only user pointer drag should pause it.
     dragMotionRef.current = {
       vx: flow.x * (0.65 + effectiveMeter * 0.9),
@@ -307,6 +344,42 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
     simRef.current?.pointerUp();
   };
 
+  const primeSmoothedEnergyFromPlayback = () => {
+    const values = energyCurveRef.current;
+    const timestamps = energyCurveTimestampsMsRef.current;
+    const readMs = samplePlaybackMsRef.current;
+    if (!values?.length || !timestamps?.length || !readMs) return;
+    const energy = energyAtTimeMs(values, timestamps, readMs());
+    if (energy != null) smoothedEnergyRef.current = energy;
+  };
+
+  const emitPlaybackEnvelopeFrame = () => {
+    if (!playbackEnvelopeActiveRef.current || dragging.current) return;
+
+    playbackEnvelopeHoldRef.current = true;
+    const peak = sampleLinearPeakRef.current?.() ?? 0;
+    const meterT = envelopeFollowerRef.current.push(peak);
+    const emitOffset = envelopeEmissionOffset(pointerPosRef.current, meterT);
+    const values = energyCurveRef.current;
+    const timestamps = energyCurveTimestampsMsRef.current;
+    const readMs = samplePlaybackMsRef.current;
+    const hasCurve =
+      (values?.length ?? 0) >= 2 &&
+      values?.length === timestamps?.length &&
+      Boolean(readMs);
+    const energyScale = hasCurve
+      ? flowIntensityScaleForEnergy(smoothedEnergyRef.current)
+      : 1;
+    syncSimEnvelopeFlow(emitOffset, meterT, playbackBpmRef.current, energyScale);
+  };
+
+  const kickstartPlaybackEnvelope = () => {
+    playbackEnvelopeActiveRef.current = true;
+    envelopeFollowerRef.current.seed(ENVELOPE_BOOT_LEVEL);
+    primeSmoothedEnergyFromPlayback();
+    emitPlaybackEnvelopeFrame();
+  };
+
   useEffect(() => {
     if (!sampleLinearPeakRef.current) return;
 
@@ -318,25 +391,19 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
         return;
       }
 
-      if (
-        dragging.current ||
-        interactionDisabledRef.current ||
-        blockedFluidHoldRef.current
-      ) {
+      if (dragging.current) {
         rafId = requestAnimationFrame(tick);
         return;
       }
 
-      playbackEnvelopeHoldRef.current = true;
-      const peak = sampleLinearPeakRef.current?.() ?? 0;
-      const meterT = envelopeFollowerRef.current.push(peak);
-      const emitOffset = envelopeEmissionOffset(pointerPosRef.current, meterT);
-      syncSimEnvelopeFlow(emitOffset, meterT, playbackBpmRef.current);
+      emitPlaybackEnvelopeFrame();
       rafId = requestAnimationFrame(tick);
     };
 
     if (playbackEnvelopeActive) {
-      envelopeFollowerRef.current.reset();
+      envelopeFollowerRef.current.seed(ENVELOPE_BOOT_LEVEL);
+      primeSmoothedEnergyFromPlayback();
+      emitPlaybackEnvelopeFrame();
       rafId = requestAnimationFrame(tick);
     }
 
@@ -346,6 +413,44 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
       releasePlaybackEnvelopeHold();
     };
   }, [playbackEnvelopeActive, sampleLinearPeak]);
+
+  useEffect(() => {
+    const hasCurve =
+      (energyCurve?.length ?? 0) >= 2 &&
+      energyCurve?.length === energyCurveTimestampsMs?.length &&
+      Boolean(samplePlaybackMs);
+
+    if (!showPointer || !hasCurve) {
+      smoothedEnergyRef.current = 0.5;
+      return;
+    }
+
+    let primed = false;
+    let rafId = 0;
+    const tick = () => {
+      const values = energyCurveRef.current;
+      const timestamps = energyCurveTimestampsMsRef.current;
+      const readMs = samplePlaybackMsRef.current;
+      if (!values?.length || !timestamps?.length || !readMs) {
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+
+      const energy = energyAtTimeMs(values, timestamps, readMs());
+      if (energy != null) {
+        if (!primed) {
+          smoothedEnergyRef.current = energy;
+          primed = true;
+        } else {
+          smoothedEnergyRef.current += (energy - smoothedEnergyRef.current) * 0.14;
+        }
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [showPointer, energyCurve, energyCurveTimestampsMs, samplePlaybackMs]);
 
   useEffect(() => {
     if (interactionDisabled) {
@@ -379,7 +484,7 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
   };
 
   const updatePointerHover = (clientX: number, clientY: number) => {
-    if (interactionDisabledRef.current) return;
+    if (interactionDisabledRef.current || !showPointerRef.current) return;
     const dist = pointerHitDistance(clientX, clientY);
     let next = overPointerStickyRef.current;
     if (next) {
@@ -394,6 +499,7 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
   };
 
   const updateMoodLabelsForClient = (clientX: number, clientY: number) => {
+    if (!showPointerRef.current) return;
     const pad = padRef.current;
     if (!pad) return;
     const rect = pad.getBoundingClientRect();
@@ -488,11 +594,13 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
 
   const padCursorClass = interactionDisabled
     ? "cursor-not-allowed"
-    : isDragging && dragFromPointerRef.current
-      ? "cursor-grabbing"
-      : overPointer
-        ? "cursor-pointer"
-        : "cursor-default";
+    : !showPointer
+      ? "cursor-default"
+      : isDragging && dragFromPointerRef.current
+        ? "cursor-grabbing"
+        : overPointer
+          ? "cursor-pointer"
+          : "cursor-default";
 
   return (
     <div
@@ -532,7 +640,7 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
         style={{
           width: PAD_SIZE,
           height: PAD_SIZE,
-          boxShadow: "inset 0 0 40px rgba(0, 0, 0, 0.35)",
+          boxShadow: "inset 0 0 32px rgba(0, 0, 0, 0.2)",
         }}
         onPointerEnter={(e) => updateMoodLabelsForClient(e.clientX, e.clientY)}
         onPointerLeave={() => {
@@ -541,7 +649,7 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
           setOverPointer(false);
         }}
         onPointerDown={(e) => {
-          if (interactionDisabled) return;
+          if (interactionDisabled || !showPointer) return;
           updateMoodLabelsForClient(e.clientX, e.clientY);
           const pad = padRef.current;
           if (!pad) return;
@@ -607,24 +715,26 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
           className="pointer-events-none absolute inset-0 block h-full w-full"
           style={{ width: PAD_SIZE, height: PAD_SIZE }}
         />
-        <div
-          className="pointer-events-none absolute z-10 overflow-visible"
-          style={{
-            left: pointerX,
-            top: pointerY,
-            width: POINTER_R * 2,
-            height: POINTER_R * 2,
-          }}
-        >
-          <DottedSpherePointer
-            padOffset={pointerPos}
-            colorDiscR={PAD_R}
-            dragMotionRef={dragMotionRef}
-            hovered={overPointer || (isDragging && dragFromPointerRef.current)}
-            className="absolute inset-0"
-          />
-          <PointerDragHint visible={showDragHint && !isDragging} />
-        </div>
+        {showPointer ? (
+          <div
+            className="pointer-events-none absolute z-10 overflow-visible"
+            style={{
+              left: pointerX,
+              top: pointerY,
+              width: POINTER_R * 2,
+              height: POINTER_R * 2,
+            }}
+          >
+            <DottedSpherePointer
+              padOffset={pointerPos}
+              colorDiscR={PAD_R}
+              dragMotionRef={dragMotionRef}
+              hovered={overPointer || (isDragging && dragFromPointerRef.current)}
+              className="absolute inset-0"
+            />
+            <PointerDragHint visible={showDragHint && !isDragging} />
+          </div>
+        ) : null}
       </div>
     </div>
   );

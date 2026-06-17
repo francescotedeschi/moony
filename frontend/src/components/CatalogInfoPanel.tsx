@@ -6,11 +6,19 @@ import { api, type CatalogStats } from "../lib/api";
 import { errorMessage, isAbortError } from "../lib/abortError";
 
 const MOOD_DISPLAY: Record<string, string> = {
-  calm: "Calm",
-  joy: "Joy",
-  energy: "Energy",
-  tension: "Tension",
-  sad: "Sad",
+  // 7 Cyanite zones
+  energetic: "Energetic",
+  happy:     "Happy",
+  chilled:   "Chilled",
+  romantic:  "Romantic",
+  sad:       "Sad",
+  dark:      "Dark",
+  tense:     "Tense",
+  // Legacy 5-zone aliases (backward compat)
+  calm:      "Chilled",
+  joy:       "Happy",
+  energy:    "Energetic",
+  tension:   "Tense",
 };
 
 const CATALOG_URLS: Record<string, string> = {

@@ -24,6 +24,8 @@ def track_timeline_payload(track: Track) -> dict:
         "musixmatch": track.musixmatch.model_dump() if track.musixmatch else None,
         **motion_summary(track.motion),
         "motion_preview": motion_preview_curve(track.motion, duration_ms=duration_ms),
+        "energy_curve": track.energy_curve,
+        "energy_curve_timestamps_ms": track.energy_curve_timestamps_ms,
         "segments": [
             {
                 "t_start": s.t_start,
@@ -35,6 +37,9 @@ def track_timeline_payload(track: Track) -> dict:
                 "description": s.description or "",
                 "moss_emotion_label": s.moss_emotion_label or "",
                 "essentia_emotion_label": s.essentia_emotion_label or "",
+                "cyanite_mood_tag": s.cyanite_mood_tag or "",
+                "cyanite_v": s.cyanite_v,
+                "cyanite_ar": s.cyanite_ar,
             }
             for idx, s in enumerate(segments)
         ],

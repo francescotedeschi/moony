@@ -87,8 +87,8 @@ def test_restrict_ranked_keeps_unplayed_tier_only():
     assert [t.id for _, t in out] == ["b"]
 
 
-def _joy_track(tid: str) -> dict:
-    return {
+def _joy_track(tid: str, *, subtitles: bool = False) -> dict:
+    row = {
         "id": tid,
         "title": tid,
         "artist": "A",
@@ -122,6 +122,14 @@ def _joy_track(tid: str) -> dict:
             },
         ],
     }
+    if subtitles:
+        row["musixmatch"] = {
+            "track_id": f"mm-{tid}",
+            "commontrack_id": f"ct-{tid}",
+            "has_subtitles": 1,
+            "has_lyrics": 1,
+        }
+    return row
 
 
 def test_find_session_seed_calm_opener():
@@ -163,7 +171,7 @@ def test_find_session_seed_calm_opener():
     result = find_session_seed(cat.tracks, set(), "calm", play_counts={})
     assert result is not None
     assert result[0].id == "calm-opener"
-    assert result[8] == "calm"
+    assert result[8] == "chilled"
 
 
 def test_find_joy_session_seed_prefers_zero_plays():
@@ -182,7 +190,26 @@ def test_find_joy_session_seed_prefers_zero_plays():
     )
     assert result is not None
     assert result[0].id == "fresh"
-    assert result[8] == "joy"
+    assert result[8] == "happy"
+
+
+def test_find_session_seed_prefers_synced_subtitles():
+    from app.matching.core import find_session_seed
+
+    cat = normalize_catalog(
+        {
+            "catalog_schema": "moodpad-catalog-musicathon",
+            "tracks": [
+                _joy_track("no-subs"),
+                _joy_track("with-subs", subtitles=True),
+            ],
+        }
+    )
+    result = find_session_seed(cat.tracks, set(), "happy", play_counts={})
+    assert result is not None
+    assert result[0].id == "with-subs"
+    assert result[0].musixmatch is not None
+    assert result[0].musixmatch.has_subtitles == 1
 
 
 def test_find_joy_session_seed_joy_only_at_first_segment():

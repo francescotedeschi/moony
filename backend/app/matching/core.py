@@ -30,6 +30,7 @@ from app.matching.emotions import (
     branch_target_va,
     emotion_label_for_branch,
     emotion_label_for_va,
+    normalize_emotion_label,
     resolve_search_target,
 )
 from app.matching.motion_crossfade import MotionCrossfadePlan, crossfade_plan_between_tracks
@@ -67,6 +68,22 @@ WEAK_MOOD_DISTANCE = 0.42
 POOR_MOOD_DISTANCE = 0.58
 TARGET_EMOTION_FRACTION = 0.5
 TARGET_EMOTION_DEPTH_BONUS = 3.0
+
+# Weight for Cyanite V/A affinity term (relative to mood_dist * 10.0 base score).
+# At 0.05 the max differential within a same-label pool is ~1.2 points — enough to
+# break ties on within-pool position without overriding embedding or mood_dist signals.
+# Raise toward 0.15 if Cyanite signal quality improves (e.g. after affine calibration).
+CYANITE_VA_WEIGHT = 0.05
+
+# Weight for the 13D Cyanite mood score term.
+# Boosts sections with high score on the target mood label, giving sub-zone granularity
+# and helping sparse zones (dark, tense) surface relevant sections from other pools.
+CYANITE_MOOD_VECTOR_WEIGHT = 0.10
+
+# Cyanite emotion_label → mood_scores dict key (when they differ).
+_CYANITE_LABEL_TO_SCORE_KEY: dict[str, str] = {
+    "tense": "aggressive",   # "tense" zone uses Cyanite's "aggressive" score
+}
 
 
 def euclidean(a: VA, b: VA) -> float:
@@ -243,7 +260,7 @@ def _min_motion_dist_for_emotion(
     search_target: VA,
     emotion_label: str,
 ) -> float:
-    label = emotion_label.strip().lower()
+    label = normalize_emotion_label(emotion_label)
     match_indices = [
         i
         for i, s in enumerate(track.segments)
@@ -387,7 +404,7 @@ def _entry_for_track(
 
 
 def count_segments_for_emotion(track: Track, emotion_label: str) -> int:
-    want = emotion_label.strip().lower()
+    want = normalize_emotion_label(emotion_label)
     return sum(
         1 for seg in track.segments if effective_segment_emotion_label(seg) == want
     )
@@ -453,6 +470,7 @@ def _score_candidate(
     candidate_embedding: list[float] | None,
     play_count: int = 0,
     embedding_penalties: list[WeightedEmbedding] | None = None,
+    candidate_segment: Segment | None = None,
 ) -> tuple[float, float]:
     mood_dist = euclidean(user_target, entry_va)
     score = -mood_dist * 10.0 + bpm_compat(bpm_current, track_bpm) * 1.5
@@ -471,6 +489,21 @@ def _score_candidate(
             )
     if track is not None and target_emotion_label:
         score += target_emotion_depth_bonus(track, target_emotion_label)
+    if (
+        candidate_segment is not None
+        and candidate_segment.cyanite_v is not None
+        and candidate_segment.cyanite_ar is not None
+    ):
+        cy_va = VA(v=candidate_segment.cyanite_v, ar=candidate_segment.cyanite_ar)
+        score -= euclidean(user_target, cy_va) * 10.0 * CYANITE_VA_WEIGHT
+    if (
+        candidate_segment is not None
+        and candidate_segment.cyanite_mood_scores
+        and target_emotion_label
+    ):
+        score_key = _CYANITE_LABEL_TO_SCORE_KEY.get(target_emotion_label, target_emotion_label)
+        cy_mood_score = candidate_segment.cyanite_mood_scores.get(score_key, 0.0)
+        score += cy_mood_score * 10.0 * CYANITE_MOOD_VECTOR_WEIGHT
     return score, mood_dist
 
 
@@ -586,7 +619,7 @@ def _pick_best_from_pool(
     embedding_penalties: list[WeightedEmbedding] | None = None,
 ) -> tuple[Track, Segment, int, float, int, VA, float, str, str] | None:
     best: tuple[Track, Segment, int, float, int, VA, float, str, str] | None = None
-    want = target_label.strip().lower()
+    want = normalize_emotion_label(target_label)
 
     for track in pool:
         use_same_track_ctx = (
@@ -619,6 +652,7 @@ def _pick_best_from_pool(
             candidate_embedding=list(seg.embedding) if seg.embedding else None,
             play_count=counts.get(track.id, 0),
             embedding_penalties=embedding_penalties,
+            candidate_segment=seg,
         )
         quality = mood_quality(mood_dist)
 
@@ -723,10 +757,10 @@ def _pick_joy_session_opener(
     *,
     bpm_current: int,
     counts: dict[str, int],
-    target_label: str = "joy",
+    target_label: str = "happy",
 ) -> tuple[Track, Segment, int, float, int, VA, float, str, str] | None:
-    """Score joy openers at segment 0 — entry rules skip index 0 elsewhere."""
-    want = target_label.strip().lower()
+    """Score happy/joy openers at segment 0 — entry rules skip index 0 elsewhere."""
+    want = normalize_emotion_label(target_label)
     best: tuple[Track, Segment, int, float, int, VA, float, str, str] | None = None
 
     for track in candidates:
@@ -744,6 +778,7 @@ def _pick_joy_session_opener(
             current_embedding=None,
             candidate_embedding=list(seg.embedding) if seg.embedding else None,
             play_count=counts.get(track.id, 0),
+            candidate_segment=seg,
         )
         quality = mood_quality(mood_dist)
         if best is None:
@@ -756,6 +791,14 @@ def _pick_joy_session_opener(
     return best
 
 
+def track_has_synced_subtitles(track: Track) -> bool:
+    """True when Musixmatch timed subtitles are available for this track."""
+    mm = track.musixmatch
+    if not mm or not mm.has_subtitles:
+        return False
+    return bool(mm.track_id or mm.commontrack_id)
+
+
 def find_session_seed(
     tracks: Iterable[Track],
     exclude_ids: set[str],
@@ -763,12 +806,12 @@ def find_session_seed(
     play_counts: dict[str, int] | None = None,
 ) -> tuple[Track, Segment, int, float, int, VA, float, str, str] | None:
     """Session opener: mood track with the fewest global plays (0 preferred)."""
-    want = mood_label.strip().lower()
-    if want not in {"calm", "joy", "energy"}:
-        want = "joy"
+    want = normalize_emotion_label(mood_label)
+    if want not in {"chilled", "happy", "energetic"}:
+        want = "happy"
     branch = next(
         (b for b in EMOTION_BRANCHES if emotion_label_for_branch(b) == want),
-        next(b for b in EMOTION_BRANCHES if b.name == "Joy"),
+        next(b for b in EMOTION_BRANCHES if b.name == "Happy"),
     )
     pad_target = VA(v=branch.pad_v, ar=branch.pad_ar)
 
@@ -789,10 +832,13 @@ def find_session_seed(
     if not eligible:
         return None
 
+    with_subtitles = [track for track in eligible if track_has_synced_subtitles(track)]
+    search_pool = with_subtitles or eligible
+
     counts = play_counts or {}
-    play_tiers = sorted({counts.get(track.id, 0) for track in eligible})
+    play_tiers = sorted({counts.get(track.id, 0) for track in search_pool})
     for tier_plays in play_tiers:
-        tier = [track for track in eligible if counts.get(track.id, 0) == tier_plays]
+        tier = [track for track in search_pool if counts.get(track.id, 0) == tier_plays]
         if not tier:
             continue
         result = _pick_joy_session_opener(
@@ -813,8 +859,8 @@ def find_joy_session_seed(
     exclude_ids: set[str],
     play_counts: dict[str, int] | None = None,
 ) -> tuple[Track, Segment, int, float, int, VA, float, str, str] | None:
-    """Backward-compatible joy-only session opener."""
-    return find_session_seed(tracks, exclude_ids, "joy", play_counts=play_counts)
+    """Backward-compatible happy/joy session opener."""
+    return find_session_seed(tracks, exclude_ids, "happy", play_counts=play_counts)
 
 
 def prefetch_intents(
@@ -917,6 +963,7 @@ def prefetch_intents(
                 candidate_embedding=list(seg.embedding) if seg.embedding else None,
                 play_count=counts.get(track.id, 0),
                 embedding_penalties=embedding_penalties,
+                candidate_segment=seg,
             )
             scored.append((score, track, seg, idx, start_ms, entry_va, mood_dist))
 

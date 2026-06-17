@@ -6,7 +6,7 @@ import math
 
 from app.catalog.motion import motion_at_sec_interpolated, motion_for_track, motion_index_at_sec
 from app.matching.beat_align import snap_entry_ms
-from app.matching.emotions import emotion_label_for_va
+from app.matching.emotions import emotion_label_for_va, normalize_emotion_label
 
 from app.models.catalog import Segment, Track, Transition, VA
 
@@ -144,16 +144,25 @@ def eligible_entry_indices(track: Track, indices: list[int]) -> list[int]:
     return [i for i in indices if segment_entry_eligible(track, i)]
 
 
+_LEGACY_LABEL_REMAP: dict[str, str] = {
+    "calm":    "chilled",
+    "joy":     "happy",
+    "energy":  "energetic",
+    "tension": "tense",
+    # "sad" is unchanged
+}
+
+
 def effective_segment_emotion_label(seg: Segment) -> str:
     for field in (seg.emotion_label, seg.moss_emotion_label):
         lab = (field or "").strip().lower()
         if lab:
-            return lab
+            return _LEGACY_LABEL_REMAP.get(lab, lab)
     return emotion_label_for_va(VA(v=seg.v, ar=seg.ar))
 
 
 def _matching_segment_indices(track: Track, emotion_label: str) -> list[int]:
-    want = emotion_label.strip().lower()
+    want = normalize_emotion_label(emotion_label)
     if not want:
         return list(range(len(track.segments)))
     out: list[int] = []

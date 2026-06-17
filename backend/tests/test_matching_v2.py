@@ -59,10 +59,11 @@ def _track_with_motion() -> dict:
 
 
 def test_calm_pad_maps_to_catalog_search_space():
+    # (0.0, -0.8) is now nearest to "Chilled" zone (centroid +0.29, -0.18)
     search, branch = resolve_search_target(VA(v=0.0, ar=-0.8))
-    assert branch.name == "Calm"
+    assert branch.name == "Chilled"
     assert search.ar > -0.75
-    assert search.ar < -0.35
+    assert search.ar < -0.10
 
 
 def test_joy_target_picks_high_valence_entry():
@@ -146,6 +147,6 @@ def test_prefetch_calm_branch_not_sad():
         current_track=cat.tracks[0],
         current_t_ms=0,
     )
-    calm = intents["7"][0]
+    calm = intents["8"][0]  # "8" is Chilled intent (was 7 = Calm)
     assert calm["track_id"] == "calmish"
-    assert calm["segment"]["ar"] < -0.35
+    assert calm["segment"]["ar"] < -0.10

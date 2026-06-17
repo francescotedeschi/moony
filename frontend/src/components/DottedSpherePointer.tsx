@@ -79,7 +79,7 @@ function drawDotWithShadow(
   const shadowX = 0.45;
   const shadowY = 0.65;
   const shadowR = r * 1.05;
-  const shadowAlpha = Math.min(0.25, (0.1 + alpha * 0.55) * 0.5);
+  const shadowAlpha = Math.min(0.58, (0.2 + alpha * 0.82) * 0.88);
 
   ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha.toFixed(3)})`;
   ctx.beginPath();

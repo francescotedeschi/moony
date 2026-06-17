@@ -1,5 +1,5 @@
 import type { CatalogMoodSlice } from "./catalogMoodSlices";
-import { blendEmotionColor } from "./emotions";
+import { blendEmotionColor, moodpadDiscEdgeVignette } from "./emotions";
 
 function parseHexBg(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
@@ -46,7 +46,7 @@ export function drawEmotionColorDiscOnContext(
         catalogSlices?.length ? catalogSlices : null,
       );
       const edge = dist / r;
-      const vignette = 0.72 + 0.28 * (1 - edge ** 1.6);
+      const vignette = moodpadDiscEdgeVignette(edge);
 
       data[idx] = red * vignette;
       data[idx + 1] = green * vignette;

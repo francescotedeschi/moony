@@ -151,7 +151,7 @@ def test_find_best_match_prefers_track_with_half_target_segments():
     )
     assert result is not None
     track, _seg, _idx, _score, _ms, _va, _md, _mq, el = result
-    assert el == "calm"
+    assert el == "chilled"
     assert track.id == "deep_calm"
     shallow_t = next(t for t in cat.tracks if t.id == "shallow_calm")
     assert target_emotion_fraction(shallow_t, "calm") < TARGET_EMOTION_FRACTION

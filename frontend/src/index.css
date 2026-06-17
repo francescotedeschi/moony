@@ -67,7 +67,7 @@ body {
 }
 
 .moony-header {
-  --moony-title-size-playing: 2.8125rem;
+  --moony-title-size-playing: clamp(2.25rem, 6vw, 3.375rem);
   --moony-header-play-top: 0.85rem;
   --moony-header-play-gap: 0.15rem;
   --moony-ease-smooth: cubic-bezier(0.19, 1, 0.22, 1);
@@ -114,7 +114,7 @@ body {
 }
 
 .moony-header-title {
-  font-size: var(--moony-title-size-landing, clamp(5.5rem, 22vw, 11rem));
+  font-size: var(--moony-title-size-landing, clamp(2.4375rem, 7.8vw, 4.5rem));
   line-height: 0.95;
   transition:
     font-size var(--moony-header-motion),
@@ -122,6 +122,33 @@ body {
     letter-spacing var(--moony-header-motion);
   transition-delay: 0s;
   transition-timing-function: var(--moony-ease-smooth);
+}
+
+.moony-header-title-btn {
+  cursor: pointer;
+  display: inline;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  pointer-events: auto;
+}
+
+.moony-header-title-btn:hover {
+  opacity: 0.88;
+}
+
+.moony-header-title-btn:focus-visible {
+  outline: 2px solid rgb(167 139 250 / 0.65);
+  outline-offset: 4px;
+  border-radius: 0.25rem;
 }
 
 .moony-header--playing .moony-header-title {
@@ -138,13 +165,13 @@ body {
   gap: 0.1em;
   width: 100%;
   max-width: 100%;
-  max-height: 6rem;
+  max-height: 12rem;
   margin-top: clamp(0.875rem, 2.5vw, 1.35rem);
   padding-inline: 0.25rem;
   opacity: 1;
   overflow: hidden;
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-  font-size: clamp(0.8125rem, 2.6vw, 1.5rem);
+  font-size: clamp(1.625rem, 5.2vw, 3rem);
   font-weight: 500;
   line-height: 1.25;
   letter-spacing: 0.035em;
@@ -191,19 +218,19 @@ body {
 
 @media (max-width: 520px) {
   .moony-header-subtitle {
-    max-height: 3.75rem;
-    font-size: clamp(0.75rem, 3.2vw, 1.125rem);
+    max-height: 7.5rem;
+    font-size: clamp(1.5rem, 6.4vw, 2.25rem);
     letter-spacing: 0.028em;
   }
 
   .moony-header {
-    --moony-title-size-playing: 2.4375rem;
+    --moony-title-size-playing: clamp(2.0625rem, 8.4vw, 3rem);
     --moony-header-play-top: 0.75rem;
   }
 
   .moony-app--landing.moony-app-shell {
     --moony-landing-brand-top: clamp(1.5rem, 7vh, 2.75rem);
-    --moony-subtitle-stack: clamp(2rem, 5.5vw, 2.75rem);
+    --moony-subtitle-stack: clamp(4rem, 11vw, 5.5rem);
   }
 
   .moony-header-brand {
@@ -216,10 +243,10 @@ body {
 }
 
 .moony-app-shell {
-  --moony-title-size-landing: clamp(5.5rem, 22vw, 11rem);
+  --moony-title-size-landing: clamp(2.4375rem, 7.8vw, 4.5rem);
   --moony-landing-brand-top: clamp(2rem, 9vh, 4.25rem);
   --moony-subtitle-gap: clamp(0.875rem, 2.5vw, 1.35rem);
-  --moony-subtitle-stack: clamp(2.5rem, 7vw, 3.5rem);
+  --moony-subtitle-stack: clamp(5rem, 14vw, 7rem);
   --moony-header-pad-gap: clamp(1.25rem, 4vh, 2.25rem);
   --moony-content-offset: clamp(14rem, 38vh, 22rem);
   --moony-shell-gap: 1.5rem;
@@ -237,7 +264,7 @@ body {
 .moony-app--landing.moony-app-shell {
   --moony-content-offset: calc(
     var(--moony-landing-brand-top) +
-    var(--moony-title-size-landing) * 0.95 +
+    var(--moony-title-size-landing) * 1.1 +
     var(--moony-subtitle-gap) +
     var(--moony-subtitle-stack) +
     var(--moony-header-pad-gap)
@@ -270,6 +297,73 @@ body {
 .moony-player-section--playing {
   gap: 0.45rem;
   transition-delay: 0s;
+}
+
+.moony-pad-orbit-loader {
+  pointer-events: none;
+  position: absolute;
+  z-index: 20;
+  transform: translate(-50%, -50%);
+}
+
+.moony-pad-orbit-loader__svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.moony-pad-orbit-loader__track {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.12);
+  stroke-width: 2;
+}
+
+.moony-pad-orbit-loader__arc {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.92);
+  stroke-width: 2.75;
+  stroke-linecap: round;
+  stroke-dasharray: 34 265;
+  animation: moony-pad-orbit-loader-dash 1.15s linear infinite;
+  filter: drop-shadow(0 0 6px rgb(255 255 255 / 0.45));
+}
+
+@keyframes moony-pad-orbit-loader-dash {
+  to {
+    stroke-dashoffset: -299;
+  }
+}
+
+.moony-start-play-btn:not(:disabled):hover {
+  animation: moony-start-play-pulse 1.35s ease-in-out infinite;
+}
+
+.moony-start-play-btn:not(:disabled):active {
+  animation: none;
+  transform: translate(-50%, -50%) scale(0.98);
+}
+
+@keyframes moony-start-play-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 8px 32px rgb(0 0 0 / 0.5);
+    border-color: rgb(255 255 255 / 0.9);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.07);
+    box-shadow:
+      0 12px 40px rgb(0 0 0 / 0.58),
+      0 0 0 8px rgb(255 255 255 / 0.08);
+    border-color: rgb(255 255 255);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moony-start-play-btn:not(:disabled):hover {
+    animation: none;
+    transform: translate(-50%, -50%) scale(1.03);
+  }
 }
 
 .moony-pad-lyrics-overlay {
@@ -1284,6 +1378,79 @@ button.timeline-row--minimal:hover {
 
 .timeline-track-shell--minimal .timeline-track-inner {
   border-radius: 999px;
+}
+
+.timeline-row-track-area {
+  position: relative;
+  width: 100%;
+}
+
+.timeline-segment-inspect {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  z-index: 40;
+  width: 100%;
+  margin-bottom: 0.55rem;
+  pointer-events: none;
+}
+
+.timeline-segment-inspect__panel {
+  width: 100%;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 0.7rem;
+  background: rgb(10 10 14 / 0.96);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 0.45);
+}
+
+.timeline-segment-inspect__heading {
+  margin: 0 0 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.42);
+}
+
+.timeline-segment-inspect__body {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.82);
+}
+
+.timeline-segment-inspect__body p + p {
+  margin-top: 0.3rem;
+}
+
+.timeline-segment-inspect__line--bold {
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.94);
+}
+
+.timeline-segment-inspect__cyanite {
+  margin: 0.65rem 0 0;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.58);
+}
+
+.timeline-segment-inspect__cyanite-label {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.36);
+}
+
+.timeline-segment-inspect__cyanite-sep {
+  color: rgb(255 255 255 / 0.38);
+}
+
+.timeline-segment-inspect__cyanite-mood {
+  font-weight: 600;
 }
 
 .timeline-row--loading {

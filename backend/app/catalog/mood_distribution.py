@@ -1,13 +1,15 @@
-"""Per-track mood mix over the five pad zones (segment counts / total segments)."""
+"""Per-track mood mix over the seven pad zones (segment counts / total segments)."""
 
 from __future__ import annotations
 
-from app.matching.emotions import emotion_label_for_va
+from app.matching.emotions import emotion_label_for_va, normalize_emotion_label
 from app.matching.motion_match import effective_segment_emotion_label
 from app.models.catalog import Segment, Track, VA
 
-# Fixed axis order — index matches pad branches Calm → Sad.
-MOOD_DISTRIBUTION_LABELS: tuple[str, ...] = ("calm", "joy", "energy", "tension", "sad")
+# Fixed axis order — index matches 7 Cyanite pad branches.
+MOOD_DISTRIBUTION_LABELS: tuple[str, ...] = (
+    "energetic", "happy", "chilled", "romantic", "sad", "dark", "tense"
+)
 MOOD_DISTRIBUTION_SIZE = len(MOOD_DISTRIBUTION_LABELS)
 _PAD_MOOD_SET = frozenset(MOOD_DISTRIBUTION_LABELS)
 
@@ -38,7 +40,7 @@ def compute_mood_distribution(segments: list[Segment]) -> list[float]:
 
 def mood_share_for_label(track: Track, emotion_label: str) -> float:
     """O(1) mood mix share when ``track.mood_distribution`` is populated."""
-    label = emotion_label.strip().lower()
+    label = normalize_emotion_label(emotion_label)
     if label not in _PAD_MOOD_SET:
         return 0.0
     idx = MOOD_DISTRIBUTION_LABELS.index(label)

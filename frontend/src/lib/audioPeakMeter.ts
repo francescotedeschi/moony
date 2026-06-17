@@ -61,4 +61,8 @@ export class PeakEnvelopeFollower {
   reset() {
     this.level = 0;
   }
+
+  seed(level: number) {
+    this.level = Math.max(0, Math.min(1, level));
+  }
 }

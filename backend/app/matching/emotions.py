@@ -24,25 +24,46 @@ class EmotionBranch:
     catalog_ar: float
 
 
-# Pad label positions (UI) — unchanged for EmotionPad rendering.
+# Pad label positions (UI) — 7 Cyanite zones.
+# Coordinates are centroids from cyanite_valence/arousal in catalog_V17.
 EMOTION_BRANCHES: tuple[EmotionBranch, ...] = (
-    EmotionBranch("Calm", 7, 0.0, -0.8, -0.05, -0.51),
-    EmotionBranch("Joy", 2, 0.8, 0.6, 0.79, 0.61),
-    EmotionBranch("Energy", 3, 0.2, 0.9, 0.21, 0.93),
-    EmotionBranch("Tension", 4, -0.5, 0.7, -0.50, 0.71),
-    EmotionBranch("Sad", 6, -0.7, -0.5, -0.70, -0.51),
+    EmotionBranch("Energetic", 3,  0.24,  0.67,  0.24,  0.67),
+    EmotionBranch("Happy",     2,  0.65,  0.25,  0.65,  0.25),
+    EmotionBranch("Chilled",   8,  0.29, -0.18,  0.29, -0.18),
+    EmotionBranch("Romantic",  9,  0.10, -0.10,  0.10, -0.10),
+    EmotionBranch("Sad",       6, -0.27, -0.14, -0.27, -0.14),
+    EmotionBranch("Dark",      4, -0.28,  0.13, -0.28,  0.13),
+    EmotionBranch("Tense",    10, -0.50,  0.70, -0.50,  0.70),
 )
 
 EMOTION_INTENT_IDS: list[int] = [b.intent for b in EMOTION_BRANCHES]
 
-# Catalog segment emotion_label (5 zones) per pad branch
+# Catalog segment emotion_label (7 zones) per pad branch
 BRANCH_EMOTION_LABEL: dict[str, str] = {
-    "Calm": "calm",
-    "Joy": "joy",
-    "Energy": "energy",
-    "Tension": "tension",
-    "Sad": "sad",
+    "Energetic": "energetic",
+    "Happy":     "happy",
+    "Chilled":   "chilled",
+    "Romantic":  "romantic",
+    "Sad":       "sad",
+    "Dark":      "dark",
+    "Tense":     "tense",
 }
+
+
+# Legacy 5-zone MOSS labels → canonical 7-zone labels (used at matching entry points).
+LEGACY_LABEL_REMAP: dict[str, str] = {
+    "calm":    "chilled",
+    "joy":     "happy",
+    "energy":  "energetic",
+    "tension": "tense",
+    # "sad" unchanged
+}
+
+
+def normalize_emotion_label(label: str) -> str:
+    """Remap legacy 5-zone labels to their 7-zone equivalents; pass through others."""
+    lab = (label or "").strip().lower()
+    return LEGACY_LABEL_REMAP.get(lab, lab)
 
 
 def emotion_label_for_branch(branch: EmotionBranch) -> str:
@@ -94,8 +115,10 @@ def resolve_search_target(user: VA) -> tuple[VA, EmotionBranch]:
     branch = nearest_branch(user)
     offset_v = user.v - branch.pad_v
     offset_ar = user.ar - branch.pad_ar
-    # Arousal in catalog is narrower than pad labels suggest (especially Calm).
-    arousal_scale = 0.45 if branch.name == "Calm" else 0.75
+    # Low-arousal zones (Chilled, Romantic) use a tighter arousal scale to avoid
+    # overshooting into adjacent zones; all others use the standard scale.
+    _LOW_AROUSAL = {"Chilled", "Romantic"}
+    arousal_scale = 0.45 if branch.name in _LOW_AROUSAL else 0.75
     search = VA(
         v=_clamp(branch.catalog_v + offset_v * 0.85),
         ar=_clamp(branch.catalog_ar + offset_ar * arousal_scale),

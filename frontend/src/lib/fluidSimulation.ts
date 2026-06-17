@@ -5,6 +5,8 @@ export type FluidSimulationOptions = {
   /** Lower values = better performance inside the circular pad */
   simResolution?: number;
   dyeResolution?: number;
+  /** HDR bloom pass on the dye buffer (used on the mood pad). */
+  bloom?: boolean;
 };
 
 export type FluidSplatColor = { r: number; g: number; b: number };
@@ -24,6 +26,8 @@ export type FluidSimulation = {
     quantityScale?: number,
   ) => void;
   pointerUp: () => void;
+  /** Live bloom strength — higher = more glow on bright dye. */
+  setBloomIntensity: (intensity: number) => void;
   destroy: () => void;
 };
 
@@ -55,7 +59,7 @@ let config = {
   PAUSED: false,
   BACK_COLOR: { r: 0, g: 0, b: 0 },
   TRANSPARENT: true,
-  BLOOM: false,
+  BLOOM: options.bloom ?? false,
   BLOOM_ITERATIONS: 8,
   BLOOM_RESOLUTION: 256,
   BLOOM_INTENSITY: 0.45,
@@ -1697,6 +1701,9 @@ function hashCode(s) {
     },
     pointerUp() {
       updatePointerUpData(pointers[0]);
+    },
+    setBloomIntensity(intensity) {
+      config.BLOOM_INTENSITY = Math.max(0, Math.min(2, intensity));
     },
     destroy() {
       destroyed = true;
