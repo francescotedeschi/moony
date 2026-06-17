@@ -408,14 +408,44 @@ body {
 }
 
 @media (max-width: 767px) {
-  .moony-player-section--playing {
-    width: min(100%, 480px) !important;
+  html,
+  body {
+    overflow-x: clip;
   }
 
-  .moony-player-section--playing .moony-pad-shell {
-    transform: scale(0.8);
+  .moony-app-shell,
+  .moony-app--playing.moony-app-shell {
+    max-width: 100% !important;
+    overflow-x: hidden;
+  }
+
+  .moony-player-section {
+    --moony-pad-scale: min(1, calc((100vw - 3rem) / 600));
+    width: calc(600px * var(--moony-pad-scale)) !important;
+    max-width: calc(100vw - 3rem);
+    overflow-x: hidden;
+  }
+
+  .moony-app--landing .moony-player-section {
+    --moony-pad-scale: min(
+      1,
+      calc((100vw - 3rem) / 600),
+      calc((100dvh - var(--moony-content-offset) - 8rem) / 600)
+    );
+  }
+
+  .moony-app--playing .moony-player-section {
+    --moony-pad-scale: min(
+      1,
+      calc((100vw - 3rem) / 600),
+      calc((100dvh - var(--moony-content-offset) - 11rem) / 600)
+    );
+  }
+
+  .moony-pad-shell {
+    transform: scale(var(--moony-pad-scale));
     transform-origin: top center;
-    margin-bottom: -7.5rem;
+    margin-bottom: calc(600px * (var(--moony-pad-scale) - 1));
   }
 
   .moony-pad-lyrics-overlay .moony-lyrics-trail--pad-single {
@@ -438,10 +468,6 @@ body {
 
   .moony-pad-lyrics-overlay .moony-lyrics-trail__line--active {
     font-size: calc(0.9375rem * var(--lyrics-pad-scale));
-  }
-
-  .moony-app--playing.moony-app-shell {
-    max-width: min(calc(100vw - 1.5rem), 528px) !important;
   }
 }
 
