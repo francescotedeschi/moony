@@ -570,6 +570,18 @@ body {
     margin-bottom: calc(600px * (var(--moony-pad-scale) - 1));
   }
 
+  /* Subtitle: allow wrapping and scale down font so text fits the viewport */
+  .moony-header-subtitle {
+    font-size: clamp(0.875rem, 4.5vw, 1.375rem);
+    max-height: none;
+  }
+
+  .moony-header-subtitle-line {
+    white-space: normal;
+    word-break: break-word;
+    text-align: center;
+  }
+
   /* Instant state switches — no drift during scroll */
   .moony-header-brand,
   .moony-header-title,
