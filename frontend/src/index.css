@@ -570,6 +570,33 @@ body {
     margin-bottom: calc(600px * (var(--moony-pad-scale) - 1));
   }
 
+  /*
+   * Kill all header motion on mobile.
+   * The 1.35s transition on top/left/transform causes the brand to visibly
+   * drift across the screen while the user scrolls the landing page (iOS
+   * repaints fixed elements after each scroll frame). Two instant states
+   * (landing / playing) are cleaner and less disorienting on small screens.
+   */
+  .moony-header-brand,
+  .moony-header-title,
+  .moony-header-subtitle,
+  .moony-app-shell,
+  .moony-player-section {
+    transition: none !important;
+    transition-delay: 0s !important;
+  }
+
+  /*
+   * On iOS, overflow:hidden + border-radius does not clip WebGL canvases
+   * because the canvas is composited on a separate GPU layer that bypasses
+   * CSS overflow clipping. clip-path IS applied at the compositor stage and
+   * correctly masks the fluid canvas to the circular disc boundary.
+   */
+  [data-testid="emotion-pad"] {
+    clip-path: circle(50%);
+    /* Keep overflow-hidden+rounded-full as fallback for non-iOS */
+  }
+
   /* Catalog panel: cap expanded height so the collapse button stays reachable */
   .catalog-panel-body {
     max-height: 55dvh;
