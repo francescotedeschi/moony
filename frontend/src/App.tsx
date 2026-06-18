@@ -2076,6 +2076,30 @@ export default function App() {
     return () => window.removeEventListener("scroll", syncLandingHeaderCompact);
   }, []);
 
+  // Set --moony-pad-scale on the root element so mobile CSS can use it via
+  // zoom (not transform: scale) to avoid iOS Safari GPU-layer compositing
+  // bugs that make the mood pad invisible when transform: scale is used on a
+  // container that holds WebGL canvases.
+  useEffect(() => {
+    const PAD_PX = 600;
+    const PAD_MARGIN_PX = 80; // 5rem side padding
+    const MOBILE_BREAKPOINT = 767;
+
+    const update = () => {
+      const vw = window.innerWidth;
+      if (vw > MOBILE_BREAKPOINT) {
+        document.documentElement.style.removeProperty("--moony-pad-scale");
+        return;
+      }
+      const scale = Math.min(1, (vw - PAD_MARGIN_PX) / PAD_PX);
+      document.documentElement.style.setProperty("--moony-pad-scale", scale.toFixed(4));
+    };
+
+    update();
+    window.addEventListener("resize", update, { passive: true });
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
   useEffect(() => {
     if (!nowPlaying) {
       setLandingHeaderCompact(window.scrollY > 40);

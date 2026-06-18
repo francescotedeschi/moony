@@ -515,68 +515,41 @@ body {
 
   .moony-player-section {
     /*
-     * Fallback for iOS < 15.4 which does not support CSS trig functions or
-     * dvh. 0.5 gives a 300px pad — safe for all phones ≥ 375px wide.
+     * --moony-pad-scale is written to :root by a JS useEffect in App.tsx
+     * (window.innerWidth-based, reliable on all iOS versions).
+     * Fallback 0.5 covers the brief window before JS runs or on very
+     * narrow devices.
      */
-    --moony-pad-scale: 0.5;
-    width: calc(600px * var(--moony-pad-scale)) !important;
+    width: calc(600px * var(--moony-pad-scale, 0.5)) !important;
     max-width: calc(100vw - 5rem);
-    /* No overflow-x: hidden here — the app-shell handles containment and
-       overflow-x: hidden on this element can clip the composited WebGL canvas. */
-  }
-
-  /*
-   * tan(atan2(length, length)) = dimensionless ratio — the only pure-CSS way
-   * to divide two lengths and get a <number> valid for scale() / calc(px*n).
-   * Both tan(atan2()) and dvh landed in iOS 15.4; gate the whole block on dvh
-   * support so we never mix valid/invalid values in the same min() call.
-   * 5rem = shell px-6 (3rem) + 1rem breathing room each side.
-   */
-  @supports (height: 1dvh) {
-    .moony-player-section {
-      --moony-pad-scale: min(1, tan(atan2(100vw - 5rem, 600px)));
-    }
-
-    .moony-app--landing .moony-player-section {
-      --moony-pad-scale: min(
-        1,
-        tan(atan2(100vw - 5rem, 600px)),
-        tan(atan2(100dvh - var(--moony-content-offset) - 8rem, 600px))
-      );
-    }
-
-    .moony-app--playing .moony-player-section {
-      /*
-       * Cannot reference --moony-content-offset here: the playing-state value
-       * uses --moony-header-play-top / --moony-title-size-playing which are
-       * defined on .moony-header (a child), not an ancestor — CSS custom
-       * properties don't propagate upward. Inline the playing header height
-       * (~0.75rem top + 2.4375rem title + 0.15rem gap ≈ 3.5rem) plus 11rem
-       * for dock/controls clearance.
-       */
-      --moony-pad-scale: min(
-        1,
-        tan(atan2(100vw - 5rem, 600px)),
-        tan(atan2(100dvh - 3.5rem - 11rem, 600px))
-      );
-    }
   }
 
   .moony-pad-shell {
     /*
-     * mx-auto on a flex item wider than its container results in flex-start
-     * alignment (not center) because negative free space resolves auto margins
-     * to 0 before the align step. Removing auto margins and setting an explicit
-     * align-self: center forces the correct centered position (-145px overflow
-     * on each side) so transform-origin: top center coincides with the
-     * player-section center.
+     * Use CSS zoom instead of transform: scale().
+     *
+     * transform: scale() on a container that holds WebGL canvases triggers
+     * an iOS Safari compositor bug where the entire element — including
+     * sibling 2-D canvases — becomes invisible. This is because iOS creates
+     * a separate GPU backing store for each WebGL context; applying a CSS
+     * transform to the parent causes the compositor to lose track of those
+     * sub-layers, silently discarding the whole painted subtree.
+     *
+     * zoom changes the *layout* size (no GPU layer promotion, no separate
+     * compositing pass), so iOS renders the WebGL canvas and its siblings
+     * at the zoomed size without any invisible-layer side-effects.
+     *
+     * Because zoom is a layout-level operation the element occupies exactly
+     * 600px × zoom in the flex column — no negative margin-bottom hack is
+     * needed. getBoundingClientRect() inside FluidEmotionPad already returns
+     * the zoomed viewport size, so the existing padCssScale() helper
+     * computes the correct coordinate transform automatically.
      */
+    zoom: var(--moony-pad-scale, 0.5);
+    transform: none !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
     align-self: center;
-    transform: scale(var(--moony-pad-scale));
-    transform-origin: top center;
-    margin-bottom: calc(600px * (var(--moony-pad-scale) - 1));
   }
 
   /* Subtitle: allow wrapping and scale down font so text fits the viewport */
@@ -642,29 +615,6 @@ body {
    */
   .moony-app--playing.moony-app-shell {
     padding-top: 3.75rem;
-  }
-
-  /*
-   * iOS Safari compositor bug: applying clip-path to an element that
-   * contains a WebGL canvas causes the ENTIRE element — including sibling
-   * 2D canvases — to become invisible. iOS creates separate GPU layers for
-   * WebGL contexts; the clip-path then confuses the layer-tree compositor
-   * and the parent disappears.
-   *
-   * Fix: drop clip-path completely on mobile. The emotion-pad already has
-   * overflow:hidden + border-radius:50% (Tailwind rounded-full +
-   * overflow-hidden) which correctly clips the 2D colorDisc canvas.
-   * WebGL fluid may bleed slightly past the circle edge on iOS — an
-   * acceptable visual trade-off vs. a completely invisible pad.
-   *
-   * To minimise the bleed we promote the emotion-pad to its own GPU layer
-   * (will-change: transform). This sometimes persuades iOS to include the
-   * WebGL sub-layer inside the same composited boundary so overflow:hidden
-   * clips it too.
-   */
-  [data-testid="emotion-pad"] {
-    will-change: transform;
-    clip-path: none;
   }
 
   /* Catalog panel: cap expanded height so the collapse button stays reachable */
