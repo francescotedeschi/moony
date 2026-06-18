@@ -2067,13 +2067,26 @@ export default function App() {
 
   useEffect(() => {
     const SCROLL_COMPACT_THRESHOLD_PX = 40;
+    const MOBILE_BREAKPOINT = 767;
+
     const syncLandingHeaderCompact = () => {
+      // On mobile the header is always in document flow and scrolls with the
+      // page — no scroll-triggered compact state. The only layout switch on
+      // mobile is when music is actually playing (sessionLayoutActive).
+      if (window.innerWidth <= MOBILE_BREAKPOINT) {
+        setLandingHeaderCompact(false);
+        return;
+      }
       setLandingHeaderCompact(window.scrollY > SCROLL_COMPACT_THRESHOLD_PX);
     };
 
     syncLandingHeaderCompact();
     window.addEventListener("scroll", syncLandingHeaderCompact, { passive: true });
-    return () => window.removeEventListener("scroll", syncLandingHeaderCompact);
+    window.addEventListener("resize", syncLandingHeaderCompact, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", syncLandingHeaderCompact);
+      window.removeEventListener("resize", syncLandingHeaderCompact);
+    };
   }, []);
 
   // Set --moony-pad-scale on the root element so mobile CSS can use it via
