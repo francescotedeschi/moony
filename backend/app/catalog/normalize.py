@@ -302,6 +302,18 @@ def _extend_energy_curve_bounds(
     return ec, ts
 
 
+def _is_playable_catalog_row(raw: dict[str, Any]) -> bool:
+    """Skip tracks whose analysis relied on wrong Musixmatch lyrics."""
+    mm = raw.get("musixmatch") or {}
+    return mm.get("lyrics_trusted") is not False
+
+
+def _is_playable_track(track: Track) -> bool:
+    if track.musixmatch and track.musixmatch.lyrics_trusted is False:
+        return False
+    return True
+
+
 def _normalize_musixmatch(raw: dict[str, Any] | None) -> MusixmatchRef | None:
     if not raw:
         return None
@@ -315,7 +327,7 @@ def _normalize_musixmatch(raw: dict[str, Any] | None) -> MusixmatchRef | None:
         has_lyrics=int(raw.get("has_lyrics") or 0),
         has_subtitles=int(raw.get("has_subtitles") or 0),
         has_synced_subtitles=bool(raw.get("has_synced_subtitles")),
-        lyrics_trusted=bool(raw.get("lyrics_trusted", True)),
+        lyrics_trusted=raw.get("lyrics_trusted", True) is not False,
     )
 
 
@@ -326,7 +338,14 @@ def normalize_catalog(data: dict[str, Any]) -> Catalog:
         data.get("tracks", [{}])[0] if data.get("tracks") else {}
     ):
         return _from_moodpad_export(data, version)
-    return Catalog.model_validate(data)
+    cat = Catalog.model_validate(data)
+    playable = [t for t in cat.tracks if _is_playable_track(t)]
+    if len(playable) < len(cat.tracks):
+        logger.warning(
+            "Excluded %d tracks with untrusted Musixmatch lyrics",
+            len(cat.tracks) - len(playable),
+        )
+    return Catalog(tracks=playable)
 
 
 def _looks_like_v12_track(track: dict[str, Any]) -> bool:
@@ -335,7 +354,16 @@ def _looks_like_v12_track(track: dict[str, Any]) -> bool:
 
 def _from_moodpad_export(data: dict[str, Any], version: str = "1.2") -> Catalog:
     tracks: list[Track] = []
+    excluded_untrusted = 0
     for raw in data.get("tracks", []):
+        if not _is_playable_catalog_row(raw):
+            excluded_untrusted += 1
+            logger.info(
+                "Excluding %s (%s) — Musixmatch lyrics not trusted",
+                raw.get("id"),
+                raw.get("title"),
+            )
+            continue
         primary = str(raw.get("primary_emotion", "calm")).lower()
         base_v, base_ar = EMOTION_VA.get(primary, (0.0, 0.0))
         jamendo = raw.get("jamendo") or {}
@@ -406,6 +434,11 @@ def _from_moodpad_export(data: dict[str, Any], version: str = "1.2") -> Catalog:
         )
 
     with_motion = sum(1 for t in tracks if t.has_motion)
+    if excluded_untrusted:
+        logger.warning(
+            "Excluded %d tracks with untrusted Musixmatch lyrics",
+            excluded_untrusted,
+        )
     logger.info(
         "Normalized %d tracks from MoodPad catalog (version=%s, with_motion=%d)",
         len(tracks),

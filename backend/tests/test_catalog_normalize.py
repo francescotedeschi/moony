@@ -122,6 +122,46 @@ def test_energy_curve_extended_to_track_bounds():
     assert len(t.energy_curve) == 5
 
 
+def test_normalize_excludes_untrusted_lyrics():
+    sample = {
+        "catalog_schema": "moodpad-catalog-musicathon",
+        "tracks": [
+            {
+                "id": "jamendo_trusted",
+                "title": "Trusted",
+                "artist": "Artist",
+                "duration_sec": 120.0,
+                "primary_emotion": "calm",
+                "jamendo": {"audio_url": "https://example.com/a.mp3", "tags": []},
+                "sections": [
+                    {"start_sec": 0.0, "end_sec": 120.0, "structure_label": "verse", "emotion_label": "calm"},
+                ],
+                "musixmatch": {"track_id": "1", "lyrics_trusted": True},
+            },
+            {
+                "id": "jamendo_untrusted",
+                "title": "Wrong Lyrics",
+                "artist": "Artist",
+                "duration_sec": 120.0,
+                "primary_emotion": "calm",
+                "jamendo": {"audio_url": "https://example.com/b.mp3", "tags": []},
+                "sections": [
+                    {"start_sec": 0.0, "end_sec": 120.0, "structure_label": "verse", "emotion_label": "calm"},
+                ],
+                "musixmatch": {
+                    "track_id": "2",
+                    "lyrics_trusted": False,
+                    "subtitle_audit_reasons": ["metadata_mismatch"],
+                },
+            },
+        ],
+    }
+    cat = normalize_catalog(sample)
+    assert len(cat.tracks) == 1
+    assert cat.get_track("jamendo_trusted") is not None
+    assert cat.get_track("jamendo_untrusted") is None
+
+
 def test_load_user_catalog_if_present():
     path = Path(__file__).resolve().parents[2] / "catalog" / "catalog.json"
     if not path.is_file():
