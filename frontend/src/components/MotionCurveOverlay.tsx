@@ -26,19 +26,31 @@ type Pt = { x: number; y: number };
 /**
  * Draw a Catmull-Rom spline through `pts` onto `ctx`.
  * Uses ghost boundary points so the curve passes through every data point.
+ * When `xBounds` is set, ghost x is pinned to the track edges so the spline
+ * does not overshoot past the rounded timeline ends.
  */
-function drawCatmullRom(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
+function drawCatmullRom(
+  ctx: CanvasRenderingContext2D,
+  pts: Pt[],
+  xBounds?: { min: number; max: number },
+): void {
   if (pts.length < 2) return;
 
-  // Extend with ghost boundary points
-  const p = [
-    { x: 2 * pts[0].x - pts[1].x, y: 2 * pts[0].y - pts[1].y },
-    ...pts,
-    {
-      x: 2 * pts[pts.length - 1].x - pts[pts.length - 2].x,
-      y: 2 * pts[pts.length - 1].y - pts[pts.length - 2].y,
-    },
-  ];
+  const ghostStart = {
+    x: 2 * pts[0].x - pts[1].x,
+    y: 2 * pts[0].y - pts[1].y,
+  };
+  const ghostEnd = {
+    x: 2 * pts[pts.length - 1].x - pts[pts.length - 2].x,
+    y: 2 * pts[pts.length - 1].y - pts[pts.length - 2].y,
+  };
+
+  if (xBounds) {
+    ghostStart.x = xBounds.min;
+    ghostEnd.x = xBounds.max;
+  }
+
+  const p = [ghostStart, ...pts, ghostEnd];
 
   ctx.moveTo(pts[0].x, pts[0].y);
 
@@ -80,6 +92,13 @@ export function MotionCurveOverlay({ points, durationMs, cyPoints }: Props) {
       if (!ctx) return;
 
       ctx.clearRect(0, 0, w, h);
+
+      // Clip to pill shape so curves (and their glow) stay inside rounded ends.
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(0, 0, w, h, h / 2);
+      ctx.clip();
+
       const padY = h * 0.18;
       const innerH = h - padY * 2;
 
@@ -119,7 +138,7 @@ export function MotionCurveOverlay({ points, durationMs, cyPoints }: Props) {
         ctx.shadowBlur = 5 * dpr;
 
         ctx.beginPath();
-        drawCatmullRom(ctx, pts);
+        drawCatmullRom(ctx, pts, { min: 0, max: w });
 
         const cyGrad = ctx.createLinearGradient(0, 0, w, 0);
         cyGrad.addColorStop(0, "rgba(255, 255, 255, 0.35)");
@@ -134,6 +153,8 @@ export function MotionCurveOverlay({ points, durationMs, cyPoints }: Props) {
 
         ctx.shadowBlur = 0;
       }
+
+      ctx.restore();
     };
 
     draw();
