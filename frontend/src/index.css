@@ -515,42 +515,51 @@ body {
 
   .moony-player-section {
     /*
-     * tan(atan2(length, length)) = dimensionless ratio — the only pure-CSS
-     * way to divide two lengths and get a <number> valid for scale() and
-     * calc(px * number).  Plain calc(vw / 600) produces a <length>, not a
-     * <number>, so min(1, that) would be invalid and the transform would
-     * silently not apply.
-     * 5rem = shell px-6 (3rem) + 1rem breathing room each side.
+     * Fallback for iOS < 15.4 which does not support CSS trig functions or
+     * dvh. 0.5 gives a 300px pad — safe for all phones ≥ 375px wide.
      */
-    --moony-pad-scale: min(1, tan(atan2(100vw - 5rem, 600px)));
+    --moony-pad-scale: 0.5;
     width: calc(600px * var(--moony-pad-scale)) !important;
     max-width: calc(100vw - 5rem);
     /* No overflow-x: hidden here — the app-shell handles containment and
        overflow-x: hidden on this element can clip the composited WebGL canvas. */
   }
 
-  .moony-app--landing .moony-player-section {
-    --moony-pad-scale: min(
-      1,
-      tan(atan2(100vw - 5rem, 600px)),
-      tan(atan2(100dvh - var(--moony-content-offset) - 8rem, 600px))
-    );
-  }
+  /*
+   * tan(atan2(length, length)) = dimensionless ratio — the only pure-CSS way
+   * to divide two lengths and get a <number> valid for scale() / calc(px*n).
+   * Both tan(atan2()) and dvh landed in iOS 15.4; gate the whole block on dvh
+   * support so we never mix valid/invalid values in the same min() call.
+   * 5rem = shell px-6 (3rem) + 1rem breathing room each side.
+   */
+  @supports (height: 1dvh) {
+    .moony-player-section {
+      --moony-pad-scale: min(1, tan(atan2(100vw - 5rem, 600px)));
+    }
 
-  .moony-app--playing .moony-player-section {
-    /*
-     * Cannot reference --moony-content-offset here because the playing-state
-     * value of that variable uses --moony-header-play-top /
-     * --moony-title-size-playing which are defined on .moony-header (a child),
-     * not on any ancestor — CSS custom properties don't propagate upward.
-     * Inline the playing header height (~0.75rem top + 2.4375rem title +
-     * 0.15rem gap ≈ 3.5rem) plus 11rem for the dock/controls clearance.
-     */
-    --moony-pad-scale: min(
-      1,
-      tan(atan2(100vw - 5rem, 600px)),
-      tan(atan2(100dvh - 3.5rem - 11rem, 600px))
-    );
+    .moony-app--landing .moony-player-section {
+      --moony-pad-scale: min(
+        1,
+        tan(atan2(100vw - 5rem, 600px)),
+        tan(atan2(100dvh - var(--moony-content-offset) - 8rem, 600px))
+      );
+    }
+
+    .moony-app--playing .moony-player-section {
+      /*
+       * Cannot reference --moony-content-offset here: the playing-state value
+       * uses --moony-header-play-top / --moony-title-size-playing which are
+       * defined on .moony-header (a child), not an ancestor — CSS custom
+       * properties don't propagate upward. Inline the playing header height
+       * (~0.75rem top + 2.4375rem title + 0.15rem gap ≈ 3.5rem) plus 11rem
+       * for dock/controls clearance.
+       */
+      --moony-pad-scale: min(
+        1,
+        tan(atan2(100vw - 5rem, 600px)),
+        tan(atan2(100dvh - 3.5rem - 11rem, 600px))
+      );
+    }
   }
 
   .moony-pad-shell {
@@ -597,20 +606,26 @@ body {
    * page. On desktop it is position:fixed and the shell uses padding-top to
    * push content below it — on mobile that causes the fixed brand to drift
    * visibly during iOS momentum scroll.
+   *
+   * !important is required: the global .moony-header { position: fixed }
+   * rule has lower specificity (1 class vs 2 classes here) but some iOS
+   * Safari versions apply the fixed rule anyway, possibly due to aggressive
+   * CSS caching of previous stylesheets. The !important guarantees the
+   * in-flow behaviour regardless of cache state.
    */
   .moony-app--landing .moony-header {
-    position: relative;
-    height: auto;
+    position: relative !important;
+    height: auto !important;
     pointer-events: auto;
   }
 
   .moony-app--landing .moony-header-brand {
-    position: relative;
-    top: auto;
-    left: auto;
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
     width: 100%;
     max-width: 100%;
-    transform: none;
+    transform: none !important;
     align-items: center;
     padding-top: clamp(1.5rem, 6vh, 3rem);
     padding-bottom: clamp(1rem, 3vh, 2rem);
@@ -618,7 +633,7 @@ body {
 
   /* Header is in flow — drop the padding that compensated for fixed position */
   .moony-app--landing.moony-app-shell {
-    padding-top: 0;
+    padding-top: 0 !important;
   }
 
   /*
