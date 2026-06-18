@@ -5,6 +5,14 @@ export type PreparedLyricLine = LyricLine & { end_ms: number };
 /** Small lead so the highlighted line feels aligned with the vocal. */
 export const LYRICS_SYNC_LEAD_MS = 150;
 
+/** Hide synced lyrics when motion vocal presence falls below this level. */
+export const LYRICS_VOCAL_MIN = 0.34;
+
+export type LyricAtTimeOpts = {
+  vocalLevel?: number | null;
+  vocalMin?: number;
+};
+
 export function prepareLyricLines(lines: LyricLine[]): PreparedLyricLine[] {
   const sorted = [...lines].sort((a, b) => a.t_ms - b.t_ms || a.line_index - b.line_index);
   return sorted.map((line, index) => ({
@@ -47,6 +55,7 @@ export function lyricAtTime(
   lines: LyricLine[] | PreparedLyricLine[],
   currentMs: number,
   leadMs = LYRICS_SYNC_LEAD_MS,
+  opts?: LyricAtTimeOpts,
 ): PreparedLyricLine | null {
   if (!lines.length) return null;
   const prepared =
@@ -58,6 +67,8 @@ export function lyricAtTime(
   if (t < line.t_ms) return null;
   if (currentMs >= line.end_ms) return null;
   if (!line.text.trim()) return null;
+  const vocalMin = opts?.vocalMin ?? LYRICS_VOCAL_MIN;
+  if (opts?.vocalLevel != null && opts.vocalLevel < vocalMin) return null;
   return line;
 }
 
@@ -66,8 +77,9 @@ export function hasLyricsAtTime(
   lines: LyricLine[] | PreparedLyricLine[],
   currentMs: number,
   leadMs = LYRICS_SYNC_LEAD_MS,
+  opts?: LyricAtTimeOpts,
 ): boolean {
-  return lyricAtTime(lines, currentMs, leadMs) !== null;
+  return lyricAtTime(lines, currentMs, leadMs, opts) !== null;
 }
 
 /** True when Musixmatch returned timed LRC subtitles (not snippet / static text). */

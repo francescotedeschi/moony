@@ -28,6 +28,9 @@ async def get_track_lyrics(track_id: str) -> LyricsResponse:
     if not mm or not (mm.commontrack_id or mm.track_id):
         raise HTTPException(status_code=404, detail="No Musixmatch reference for track")
 
+    if not mm.lyrics_trusted:
+        raise HTTPException(status_code=404, detail="Lyrics unavailable (untrusted Musixmatch match)")
+
     result = await musixmatch_client.get_subtitle_lines(
         commontrack_id=mm.commontrack_id,
         track_id=mm.track_id,

@@ -4,7 +4,30 @@ from __future__ import annotations
 
 from app.catalog.motion import motion_preview_curve, motion_summary
 from app.matching.motion_match import effective_segment_label
-from app.models.catalog import Track
+from app.models.catalog import Track, TrackMotion
+
+
+def _motion_series_arrays(
+    motion: TrackMotion | None,
+    values: list[float],
+    duration_ms: int,
+) -> tuple[list[float], list[int]]:
+    if motion is None or not values:
+        return [], []
+    timestamps_ms = [
+        int(round(i * motion.hop_sec * 1000)) for i in range(len(values))
+    ]
+    if duration_ms > 0:
+        trimmed: list[float] = []
+        trimmed_ts: list[int] = []
+        for val, t_ms in zip(values, timestamps_ms):
+            if t_ms > duration_ms:
+                break
+            trimmed.append(float(val))
+            trimmed_ts.append(t_ms)
+        if trimmed:
+            return trimmed, trimmed_ts
+    return [float(v) for v in values], timestamps_ms
 
 
 def track_timeline_payload(track: Track) -> dict:
@@ -12,6 +35,11 @@ def track_timeline_payload(track: Track) -> dict:
     duration_ms = max((s.t_end for s in segments), default=0)
     duration_sec = (
         track.duration_sec if track.duration_sec and track.duration_sec > 0 else duration_ms / 1000.0
+    )
+    vocal_curve, vocal_curve_timestamps_ms = _motion_series_arrays(
+        track.motion,
+        list(track.motion.vocal) if track.motion else [],
+        duration_ms,
     )
     return {
         "track_id": track.id,
@@ -26,6 +54,8 @@ def track_timeline_payload(track: Track) -> dict:
         "motion_preview": motion_preview_curve(track.motion, duration_ms=duration_ms),
         "energy_curve": track.energy_curve,
         "energy_curve_timestamps_ms": track.energy_curve_timestamps_ms,
+        "vocal_curve": vocal_curve,
+        "vocal_curve_timestamps_ms": vocal_curve_timestamps_ms,
         "segments": [
             {
                 "t_start": s.t_start,

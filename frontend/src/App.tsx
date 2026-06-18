@@ -379,19 +379,18 @@ export default function App() {
         );
         if (controller.signal.aborted) return null;
 
+        landingMatchRef.current = match;
         const url = trackAudioUrl(match.track_id);
         if (match.youtube_playback_gain != null) {
           seedCatalogYoutubeGain(url, match.youtube_playback_gain);
         }
-        await audioRef.current
+        void audioRef.current
           .preloadTrack({
             url,
             startMs: match.start_ms,
             youtubePlaybackGain: match.youtube_playback_gain,
           })
           .catch(() => {});
-        if (controller.signal.aborted) return null;
-        landingMatchRef.current = match;
         return match;
       } catch (e) {
         if (isAbortError(e) || controller.signal.aborted) return null;
@@ -920,7 +919,7 @@ export default function App() {
         } else {
           const isSessionStart = !nowPlayingRef.current;
           await audio.awaitPreloadFor(url, match.start_ms);
-          if (!audio.isTrackPreloaded(url, match.start_ms)) {
+          if (!audio.isTrackPreloaded(url, match.start_ms) && !isSessionStart) {
             audio.interruptPlayback();
           }
           const entryFade =
@@ -1495,7 +1494,7 @@ export default function App() {
         setLoading(true);
         try {
           let match = landingMatchRef.current;
-          if (landingPreloadRef.current) {
+          if (!match && landingPreloadRef.current) {
             match = (await landingPreloadRef.current) ?? match;
           }
 
@@ -1509,7 +1508,10 @@ export default function App() {
             landingPreloadRef.current = null;
             try {
               const applied = await applyMatch(match, seq, {
-                onTransitionStart: () => setSwitchingTrack(false),
+                onTransitionStart: () => {
+                  setSwitchingTrack(false);
+                  setLoading(false);
+                },
               });
               if (applied) return;
             } catch {
@@ -2168,6 +2170,8 @@ export default function App() {
               loading={false}
               enabled={audio.hasTrack}
               syncPlayback={padLyricsSyncPlayback}
+              vocalCurve={currentTimeline?.vocal_curve}
+              vocalCurveTimestampsMs={currentTimeline?.vocal_curve_timestamps_ms}
             />
           ) : null}
           {!nowPlaying ? (

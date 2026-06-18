@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { hasLyricsAtTime, lyricAtTime, prepareLyricLines } from "./lyricsSync";
+import {
+  hasLyricsAtTime,
+  LYRICS_SYNC_LEAD_MS,
+  lyricAtTime,
+  prepareLyricLines,
+} from "./lyricsSync";
 
 const lines = [
   { t_ms: 5_000, text: "First line", line_index: 0 },
@@ -38,5 +43,14 @@ describe("hasLyricsAtTime", () => {
     expect(at?.text).toBe("First line");
     expect(hasLyricsAtTime(lines, 6_000)).toBe(true);
     expect(lyricAtTime(lines, 4_000)).toBeNull();
+  });
+
+  it("hides lyrics during instrumental gaps inside a timed line window", () => {
+    expect(
+      lyricAtTime(lines, 6_000, LYRICS_SYNC_LEAD_MS, { vocalLevel: 0.2 }),
+    ).toBeNull();
+    expect(
+      lyricAtTime(lines, 6_000, LYRICS_SYNC_LEAD_MS, { vocalLevel: 0.5 })?.text,
+    ).toBe("First line");
   });
 });

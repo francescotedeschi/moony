@@ -70,6 +70,197 @@ def fetch_has_synced_subtitles(
     return line_count > 0, line_count
 
 
+GOSPEL_JAMENDO_TAGS = frozenset(
+    {"gospel", "christian", "worship", "spiritual", "ccm", "religious"}
+)
+
+WORSHIP_OPENING_RE = re.compile(
+    r"(your father above|from your father|father above|land of the living|"
+    r"grace is handed|through christ|faith in the lord|praise the lord|"
+    r"holy spirit|jesus christ|hallelujah|kingdom of heaven|savior of|"
+    r"o lord my god|\bthy staff\b|staff and rod|ears to hear, my jesus|"
+    r"foreshadow of your glory|be not silent to me|knowledge of your will|"
+    r"higher purpose than god|god's love|never know a higher purpose)",
+    re.IGNORECASE,
+)
+
+
+def parse_lrc_lines(body: str) -> list[tuple[int, str]]:
+    """Return (t_ms, text) pairs sorted by timestamp."""
+    lines: list[tuple[int, str]] = []
+    for raw in (body or "").strip().splitlines():
+        stripped = raw.strip()
+        match = LRC_TIMESTAMP.search(stripped)
+        if not match:
+            continue
+        mm, ss, frac = match.groups()
+        ms = int(mm) * 60_000 + int(ss) * 1000
+        if frac:
+            ms += int(frac.ljust(3, "0")[:3])
+        text = LRC_TIMESTAMP.sub("", stripped).strip().lower()
+        if text:
+            lines.append((ms, text))
+    lines.sort(key=lambda row: row[0])
+    return lines
+
+
+def opening_lyric_text(lines: list[tuple[int, str]], window_ms: int = 60_000) -> str:
+    return " ".join(text for t_ms, text in lines if t_ms < window_ms)
+
+
+def jamendo_tags(track: dict[str, Any]) -> set[str]:
+    tags = (track.get("jamendo") or {}).get("tags") or track.get("jamendo_tags") or []
+    return {str(tag).lower() for tag in tags if tag}
+
+
+def normalize_match_text(value: str) -> str:
+    s = unescape(value).casefold()
+    s = re.sub(r"\b(feat\.?|ft\.?|featuring)\b", " ", s)
+    s = s.replace("&", " and ")
+    s = re.sub(r"\([^)]*\)", " ", s)
+    s = re.sub(r"\[[^\]]*\]", " ", s)
+    return re.sub(r"[^a-z0-9]+", "", s)
+
+
+def artist_name_tokens(value: str) -> list[str]:
+    """Split artist string into comparable name tokens."""
+    s = unescape(value).casefold()
+    s = re.sub(r"\b(feat\.?|ft\.?|featuring)\b.*", "", s)
+    parts = re.split(r"[,/&]|\band\b", s)
+    tokens: list[str] = []
+    for part in parts:
+        normalized = re.sub(r"[^a-z0-9]+", "", part.strip())
+        if len(normalized) >= 3:
+            tokens.append(normalized)
+    return tokens
+
+
+def artists_match(catalog_artist: str, mm_artist: str) -> bool:
+    cat_norm = normalize_match_text(catalog_artist)
+    mm_norm = normalize_match_text(mm_artist)
+    if cat_norm in mm_norm or mm_norm in cat_norm:
+        return True
+
+    cat_tokens = artist_name_tokens(catalog_artist)
+    mm_tokens = artist_name_tokens(mm_artist)
+    if not cat_tokens or not mm_tokens:
+        return True
+
+    if len(cat_tokens) == 1 and len(mm_tokens) == 1:
+        cat_t, mm_t = cat_tokens[0], mm_tokens[0]
+        prefix = min(len(cat_t), len(mm_t), 5)
+        if prefix >= 4 and cat_t[:prefix] == mm_t[:prefix]:
+            return True
+
+    for cat_t in cat_tokens:
+        if not any(cat_t in mm_t or mm_t in cat_t for mm_t in mm_tokens):
+            return False
+    return True
+
+
+def metadata_matches_catalog(
+    catalog_title: str,
+    catalog_artist: str,
+    mm_title: str,
+    mm_artist: str,
+) -> bool:
+    """Loose title/artist check for Musixmatch track.get vs catalog row."""
+    cat_t = normalize_match_text(catalog_title)
+    cat_a = normalize_match_text(catalog_artist)
+    mm_t = normalize_match_text(mm_title)
+    mm_a = normalize_match_text(mm_artist)
+    if not cat_t or not cat_a or not mm_t or not mm_a:
+        return True
+    title_ok = cat_t in mm_t or mm_t in cat_t
+    return title_ok and artists_match(catalog_artist, mm_artist)
+
+
+def fetch_subtitle_body(
+    client: httpx.Client,
+    *,
+    api_key: str,
+    track_id: str | None,
+    commontrack_id: str | None,
+) -> str:
+    resp = client.get(
+        f"{MUSIXMATCH_BASE}/track.subtitle.get",
+        params={
+            "apikey": api_key,
+            "track_id": track_id or "",
+            "commontrack_id": commontrack_id or "",
+            "subtitle_format": "lrc",
+        },
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if int(data.get("message", {}).get("header", {}).get("status_code") or 0) != 200:
+        return ""
+    subtitle = data.get("message", {}).get("body", {}).get("subtitle") or {}
+    return str(subtitle.get("subtitle_body") or "")
+
+
+def fetch_track_metadata(
+    client: httpx.Client,
+    *,
+    api_key: str,
+    track_id: str,
+) -> tuple[str, str]:
+    resp = client.get(
+        f"{MUSIXMATCH_BASE}/track.get",
+        params={"apikey": api_key, "track_id": track_id},
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    track = data.get("message", {}).get("body", {}).get("track") or {}
+    return str(track.get("track_name") or ""), str(track.get("artist_name") or "")
+
+
+def audit_subtitle_trust(
+    *,
+    catalog_title: str,
+    catalog_artist: str,
+    jamendo_tag_set: set[str],
+    subtitle_body: str,
+    mm_title: str = "",
+    mm_artist: str = "",
+    opening_window_ms: int = 60_000,
+) -> list[str]:
+    """Return human-readable reasons to distrust Musixmatch subtitles."""
+    reasons: list[str] = []
+    if mm_title and mm_artist and not metadata_matches_catalog(
+        catalog_title, catalog_artist, mm_title, mm_artist
+    ):
+        reasons.append("metadata_mismatch")
+
+    lines = parse_lrc_lines(subtitle_body)
+    if count_lrc_timed_lines(subtitle_body) < 2:
+        return reasons
+
+    opening = opening_lyric_text(lines, opening_window_ms)
+    if opening and not (jamendo_tag_set & GOSPEL_JAMENDO_TAGS):
+        worship_hit = WORSHIP_OPENING_RE.search(opening)
+        if worship_hit:
+            reasons.append(f"worship_opening:{worship_hit.group(0).lower()}")
+
+    return reasons
+
+
+def mark_untrusted_musixmatch(mm: dict[str, Any], reasons: list[str]) -> None:
+    mm["lyrics_trusted"] = False
+    mm["has_synced_subtitles"] = False
+    mm["match_status"] = "subtitle_untrusted"
+    mm["subtitle_audit_reasons"] = reasons
+
+
+def restore_trusted_musixmatch(mm: dict[str, Any]) -> None:
+    mm.pop("lyrics_trusted", None)
+    mm.pop("subtitle_audit_reasons", None)
+    if mm.get("match_status") == "subtitle_untrusted":
+        mm["match_status"] = "matched"
+    if mm.get("has_subtitles"):
+        mm["has_synced_subtitles"] = True
+
+
 def load_dotenv(path: Path | None = None) -> None:
     env_path = path or ROOT / ".env"
     if not env_path.is_file():

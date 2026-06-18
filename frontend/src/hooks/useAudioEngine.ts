@@ -557,7 +557,7 @@ export function useAudioEngine() {
       const deferSeek = !opts?.forceSeek && startMs > DEFER_SEEK_MS;
       const initialMs = deferSeek ? 0 : startMs;
 
-      await warmAudioUrl(url, startMs);
+      void warmAudioUrl(url, startMs);
 
       el.pause();
       setBusGain(bus, volume);
@@ -717,6 +717,10 @@ export function useAudioEngine() {
 
   const play = useCallback(
     async ({ url, startMs = 0, youtubePlaybackGain, onPlayStart }: PlayOptions) => {
+      if (preloadInFlightRef.current) {
+        await preloadInFlightRef.current.catch(() => {});
+      }
+
       const preloaded = preloadedRef.current;
       if (
         preloaded &&

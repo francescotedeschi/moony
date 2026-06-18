@@ -153,6 +153,9 @@ export type TrackTimeline = {
   energy_curve?: number[];
   /** Millisecond timestamps aligned 1:1 with energy_curve. */
   energy_curve_timestamps_ms?: number[];
+  /** MOSS motion vocal presence [0, 1] per sample. */
+  vocal_curve?: number[];
+  vocal_curve_timestamps_ms?: number[];
   segments: MossSegment[];
 };
 
