@@ -570,13 +570,7 @@ body {
     margin-bottom: calc(600px * (var(--moony-pad-scale) - 1));
   }
 
-  /*
-   * Kill all header motion on mobile.
-   * The 1.35s transition on top/left/transform causes the brand to visibly
-   * drift across the screen while the user scrolls the landing page (iOS
-   * repaints fixed elements after each scroll frame). Two instant states
-   * (landing / playing) are cleaner and less disorienting on small screens.
-   */
+  /* Instant state switches — no drift during scroll */
   .moony-header-brand,
   .moony-header-title,
   .moony-header-subtitle,
@@ -584,6 +578,43 @@ body {
   .moony-player-section {
     transition: none !important;
     transition-delay: 0s !important;
+  }
+
+  /*
+   * Landing: put the header back in document flow so it scrolls with the
+   * page. On desktop it is position:fixed and the shell uses padding-top to
+   * push content below it — on mobile that causes the fixed brand to drift
+   * visibly during iOS momentum scroll.
+   */
+  .moony-app--landing .moony-header {
+    position: relative;
+    height: auto;
+    pointer-events: auto;
+  }
+
+  .moony-app--landing .moony-header-brand {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    max-width: 100%;
+    transform: none;
+    align-items: center;
+    padding-top: clamp(1.5rem, 6vh, 3rem);
+    padding-bottom: clamp(1rem, 3vh, 2rem);
+  }
+
+  /* Header is in flow — drop the padding that compensated for fixed position */
+  .moony-app--landing.moony-app-shell {
+    padding-top: 0;
+  }
+
+  /*
+   * Playing: keep the small fixed header; restore padding-top so the pad
+   * doesn't slide under it. Value ≈ playing header height (3.5rem).
+   */
+  .moony-app--playing.moony-app-shell {
+    padding-top: 3.75rem;
   }
 
   /*

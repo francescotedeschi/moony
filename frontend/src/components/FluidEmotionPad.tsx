@@ -80,18 +80,30 @@ const DEFAULT_POINTER_OFFSET = (() => {
 })();
 const DEFAULT_POINTER_TARGET = offsetToVa(DEFAULT_POINTER_OFFSET);
 
+/**
+ * cssScale = visual size / logical size. When a CSS transform:scale() is
+ * applied to an ancestor, getBoundingClientRect() returns the visual (scaled)
+ * rect while PAD_SIZE is the logical size. Dividing by cssScale converts
+ * viewport pixels to logical pad pixels.
+ */
+function padCssScale(padEl: HTMLElement): number {
+  return padEl.getBoundingClientRect().width / PAD_SIZE;
+}
+
 function clientToPadOffset(clientX: number, clientY: number, padEl: HTMLElement): Point {
   const rect = padEl.getBoundingClientRect();
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
-  return clampToDisc(clientX - cx, clientY - cy);
+  const s = rect.width / PAD_SIZE;
+  return clampToDisc((clientX - cx) / s, (clientY - cy) / s);
 }
 
 function offsetToClient(offset: Point, padEl: HTMLElement): { clientX: number; clientY: number } {
   const rect = padEl.getBoundingClientRect();
+  const s = rect.width / PAD_SIZE;
   return {
-    clientX: rect.left + rect.width / 2 + offset.x,
-    clientY: rect.top + rect.height / 2 + offset.y,
+    clientX: rect.left + rect.width / 2 + offset.x * s,
+    clientY: rect.top + rect.height / 2 + offset.y * s,
   };
 }
 
@@ -471,25 +483,33 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
     const pad = padRef.current;
     if (!pad) return Infinity;
     const rect = pad.getBoundingClientRect();
+    const s = rect.width / PAD_SIZE;
     const padCx = rect.left + rect.width / 2;
     const padCy = rect.top + rect.height / 2;
     const onPointer = pointerPosRef.current;
-    return Math.hypot(clientX - padCx - onPointer.x, clientY - padCy - onPointer.y);
+    // Convert logical pointer position to viewport pixels before comparing
+    return Math.hypot(clientX - padCx - onPointer.x * s, clientY - padCy - onPointer.y * s);
   };
 
   const hitPointerAt = (clientX: number, clientY: number) => {
+    const pad = padRef.current;
+    if (!pad) return false;
+    const s = padCssScale(pad);
     const dist = pointerHitDistance(clientX, clientY);
-    const scale = overPointerStickyRef.current ? POINTER_HIT_OUT_SCALE : POINTER_HIT_IN_SCALE;
-    return dist <= POINTER_R * scale;
+    const hitScale = overPointerStickyRef.current ? POINTER_HIT_OUT_SCALE : POINTER_HIT_IN_SCALE;
+    return dist <= POINTER_R * hitScale * s;
   };
 
   const updatePointerHover = (clientX: number, clientY: number) => {
     if (interactionDisabledRef.current || !showPointerRef.current) return;
+    const pad = padRef.current;
+    if (!pad) return;
+    const s = padCssScale(pad);
     const dist = pointerHitDistance(clientX, clientY);
     let next = overPointerStickyRef.current;
     if (next) {
-      if (dist > POINTER_R * POINTER_HIT_OUT_SCALE) next = false;
-    } else if (dist <= POINTER_R * POINTER_HIT_IN_SCALE) {
+      if (dist > POINTER_R * POINTER_HIT_OUT_SCALE * s) next = false;
+    } else if (dist <= POINTER_R * POINTER_HIT_IN_SCALE * s) {
       next = true;
     }
     if (next !== overPointerStickyRef.current) {
@@ -503,9 +523,10 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
     const pad = padRef.current;
     if (!pad) return;
     const rect = pad.getBoundingClientRect();
+    const s = rect.width / PAD_SIZE;
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    setMoodLabelsVisible(Math.hypot(clientX - cx, clientY - cy) <= PAD_R);
+    setMoodLabelsVisible(Math.hypot(clientX - cx, clientY - cy) <= PAD_R * s);
     updatePointerHover(clientX, clientY);
   };
 
@@ -655,10 +676,11 @@ export const FluidEmotionPad = forwardRef<EmotionPadHandle, Props>(function Flui
           if (!pad) return;
 
           const rect = pad.getBoundingClientRect();
+          const s = rect.width / PAD_SIZE;
           const padCx = rect.left + rect.width / 2;
           const padCy = rect.top + rect.height / 2;
 
-          const hitPad = Math.hypot(e.clientX - padCx, e.clientY - padCy) <= PAD_R;
+          const hitPad = Math.hypot(e.clientX - padCx, e.clientY - padCy) <= PAD_R * s;
           const hitPointer = hitPointerAt(e.clientX, e.clientY);
 
           if (!hitPad && !hitPointer) return;
