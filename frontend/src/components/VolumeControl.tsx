@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Props = {
   volume: number;
@@ -53,9 +53,22 @@ function MutedIcon() {
   );
 }
 
+/** Long-press threshold in ms — used only on touch devices. */
+const LONG_PRESS_MS = 380;
+
 export function VolumeControl({ volume, muted, onVolumeChange, onToggleMute }: Props) {
   const [open, setOpen] = useState(false);
   const leaveTimerRef = useRef(0);
+
+  // Mobile long-press state
+  const longPressTimerRef = useRef(0);
+  const longPressTriggeredRef = useRef(false);
+  const pointerTypeRef = useRef("");
+
+  useEffect(() => () => {
+    window.clearTimeout(leaveTimerRef.current);
+    window.clearTimeout(longPressTimerRef.current);
+  }, []);
 
   const showPopover = useCallback(() => {
     window.clearTimeout(leaveTimerRef.current);
@@ -113,8 +126,42 @@ export function VolumeControl({ volume, muted, onVolumeChange, onToggleMute }: P
         type="button"
         aria-label={muted ? "Unmute" : "Mute"}
         title={muted ? "Unmute" : "Mute"}
+        onPointerDown={(e) => {
+          pointerTypeRef.current = e.pointerType;
+          if (e.pointerType !== "touch") return;
+          // Start long-press timer for touch devices
+          longPressTriggeredRef.current = false;
+          window.clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = window.setTimeout(() => {
+            longPressTriggeredRef.current = true;
+            showPopover();
+          }, LONG_PRESS_MS);
+        }}
+        onPointerUp={() => {
+          window.clearTimeout(longPressTimerRef.current);
+        }}
+        onPointerCancel={() => {
+          window.clearTimeout(longPressTimerRef.current);
+        }}
         onClick={(e) => {
           e.stopPropagation();
+
+          if (pointerTypeRef.current === "touch") {
+            // Long press already opened the slider — do nothing on the
+            // subsequent synthetic click.
+            if (longPressTriggeredRef.current) return;
+
+            if (open) {
+              // Tap while slider is visible → close it, don't toggle mute.
+              setOpen(false);
+              return;
+            }
+            // Tap while slider is hidden → toggle mute.
+            onToggleMute();
+            return;
+          }
+
+          // Desktop (mouse / pen): original behaviour.
           onToggleMute();
         }}
         className={[
