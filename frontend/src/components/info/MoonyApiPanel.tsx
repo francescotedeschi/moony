@@ -21,7 +21,7 @@ const TRACK_DATA: ApiItem[] = [
     id: "track",
     method: "GET",
     path: "/tracks/{id}",
-    summary: "Track metadata, sections, and Cyanite energy curve.",
+    summary: "Track metadata, macro segments, audio URL, and optional Cyanite energy curve.",
     example: `GET /tracks/jamendo_1007926
 
 {
@@ -29,8 +29,12 @@ const TRACK_DATA: ApiItem[] = [
   "title": "San Frutos",
   "artist": "Ra00",
   "bpm": 136,
+  "duration_sec": 313.0,
   "duration_ms": 313000,
+  "audio_url": "/tracks/jamendo_1007926/audio",
   "has_energy_curve": true,
+  "energy_curve": [0.18, 0.45, 0.30],
+  "energy_curve_timestamps_ms": [0, 15000, 30000],
   "segments": [
     { "t_start": 0, "t_end": 45000, "v": 0.2, "ar": -0.5, "label": "intro" }
   ]
@@ -40,7 +44,8 @@ const TRACK_DATA: ApiItem[] = [
     id: "timeline",
     method: "GET",
     path: "/tracks/{id}/timeline",
-    summary: "MOSS segment map for timelines: mood, V/A, descriptions, Cyanite energy curve.",
+    summary:
+      "MOSS segment map for UI timelines: mood, V/A, descriptions, Cyanite tags, Musixmatch ref, energy curve.",
     example: `GET /tracks/jamendo_1007926/timeline
 
 {
@@ -49,6 +54,8 @@ const TRACK_DATA: ApiItem[] = [
   "artist": "Ra00",
   "bpm": 136,
   "duration_ms": 313000,
+  "duration_sec": 313.0,
+  "musixmatch": { "commontrack_id": 12345, "track_id": 67890, "lyrics_trusted": true },
   "segments": [
     {
       "t_start": 0,
@@ -56,7 +63,11 @@ const TRACK_DATA: ApiItem[] = [
       "v": 0.2,
       "ar": -0.5,
       "label": "intro",
-      "emotion_label": "calm"
+      "emotion_label": "calm",
+      "description": "Sparse drums, warm pad",
+      "cyanite_mood_tag": "relaxed",
+      "cyanite_v": -0.12,
+      "cyanite_ar": -0.35
     }
   ],
   "energy_curve": [0.18, 0.45, 0.30],
@@ -72,13 +83,21 @@ const TRACK_DATA: ApiItem[] = [
     example: `# Full curve
 GET /tracks/jamendo_1007926/energy
 
-# Downsampled curve for UI
+→ {
+  "track_id": "jamendo_1007926",
+  "energy_curve": [0.18, 0.45, 0.30],
+  "energy_curve_timestamps_ms": [0, 15000, 30000]
+}
+
+# Downsampled curve for timeline UI
 GET /tracks/jamendo_1007926/energy/preview
+
+→ [{ "t_ms": 0, "energy": 0.18 }, { "t_ms": 15000, "energy": 0.45 }]
 
 # Lookup at playback time (seconds)
 GET /tracks/jamendo_1007926/energy/at?t_sec=42.5
 
-{
+→ {
   "track_id": "jamendo_1007926",
   "has_energy_curve": true,
   "t_sec": 42.5,
@@ -94,7 +113,8 @@ const PLAYER: ApiItem[] = [
     id: "match",
     method: "POST",
     path: "/match",
-    summary: "Pick the best next segment from pad position, direction, and session context.",
+    summary:
+      "Pick the best next segment from pad position, direction, and session context. Returns crossfade and playback-rate plan.",
     example: `POST /match
 Content-Type: application/json
 
@@ -102,24 +122,48 @@ Content-Type: application/json
   "position": { "v": 0.8, "ar": 0.6 },
   "direction": { "v": 0.1, "ar": -0.05 },
   "bpm_current": 120,
-  "session_seed": true,
-  "exclude_ids": ["jamendo_1007926"]
+  "current_track_id": "jamendo_1007926",
+  "current_t_ms": 95000,
+  "session_seed": false,
+  "pad_only": false,
+  "exclude_ids": ["jamendo_1007926"],
+  "embedding_penalties": []
 }
 
 → {
   "track_id": "jamendo_1036435",
   "title": "…",
+  "artist": "…",
+  "bpm": 128,
+  "audio_url": "/tracks/jamendo_1036435/audio",
   "start_ms": 12400,
   "score": 0.87,
+  "mood_distance": 0.12,
+  "mood_quality": "tight",
+  "emotion_label": "energetic",
+  "segment": {
+    "v": 0.79,
+    "ar": 0.58,
+    "label": "chorus",
+    "emotion_label": "energetic",
+    "t_start": 12400,
+    "t_end": 48000
+  },
+  "musixmatch": { "commontrack_id": 12345, "lyrics_trusted": true },
   "crossfade_ms": 3200,
-  "segment": { "v": 0.79, "ar": 0.58, "label": "chorus" }
+  "crossfade_curve": "equal_power",
+  "crossfade_start_ms": 91800,
+  "playback_rate_start": 1.0,
+  "playback_rate_end": 1.067,
+  "youtube_playback_gain": 0.82
 }`,
   },
   {
     id: "prefetch",
     method: "POST",
     path: "/prefetch",
-    summary: "L1 intent tree — top candidates per emotional direction around the playhead.",
+    summary:
+      "L1 intent tree — top candidates per emotional direction around the playhead. Includes embedded L2 branches when depth > 1.",
     example: `POST /prefetch
 Content-Type: application/json
 
@@ -128,15 +172,32 @@ Content-Type: application/json
   "t_ms": 95000,
   "position": { "v": 0.2, "ar": 0.9 },
   "bpm_current": 136,
-  "depth": 1,
-  "exclude_ids": ["jamendo_1007926"]
+  "depth": 2,
+  "exclude_ids": ["jamendo_1007926"],
+  "same_mood_only": false,
+  "single_intent": null,
+  "restrict_mood_share": false
 }
 
 → {
   "current_track_id": "jamendo_1007926",
   "t_ms": 95000,
   "intents": {
-    "0": [{ "track_id": "…", "audio_start_ms": 8200, "score": 0.81 }]
+    "0": [{
+      "track_id": "…",
+      "title": "…",
+      "audio_start_ms": 8200,
+      "score": 0.81,
+      "segment": { "v": 0.2, "ar": 0.85, "label": "verse" },
+      "musixmatch": { "lyrics_trusted": true },
+      "crossfade_ms": 2800
+    }]
+  },
+  "l2": {
+    "0": {
+      "from": { "track_id": "…", "title": "…", "artist": "…" },
+      "intents": { "3": [{ "track_id": "…", "audio_start_ms": 5600, "score": 0.79 }] }
+    }
   }
 }`,
   },
@@ -144,23 +205,23 @@ Content-Type: application/json
     id: "prefetch-l2",
     method: "POST",
     path: "/prefetch/l2",
-    summary: "Deeper prefetch branches for multi-step transition planning.",
+    summary: "Background L2 tree from L1 branches already shown to the client.",
     example: `POST /prefetch/l2
 Content-Type: application/json
 
 {
   "current_track_id": "jamendo_1007926",
-  "t_ms": 95000,
-  "position": { "v": 0.2, "ar": 0.9 },
-  "bpm_current": 136,
-  "candidates_l1": {
+  "l1_intents": {
     "3": [{ "track_id": "jamendo_1036435", "audio_start_ms": 12400, "score": 0.87 }]
   }
 }
 
 → {
-  "intents": {
-    "3": [{ "track_id": "…", "audio_start_ms": 5600, "score": 0.79 }]
+  "l2": {
+    "3": {
+      "from": { "track_id": "jamendo_1036435", "title": "…", "artist": "…" },
+      "intents": { "0": [{ "track_id": "…", "audio_start_ms": 5600, "score": 0.79 }] }
+    }
   }
 }`,
   },
@@ -187,6 +248,156 @@ Content-Type: application/json
     "t_start": 12400,
     "t_end": 48000
   }
+}`,
+  },
+];
+
+const LYRICS: ApiItem[] = [
+  {
+    id: "lyrics",
+    method: "GET",
+    path: "/tracks/{id}/lyrics",
+    summary:
+      "Synced lyric lines from Musixmatch (subtitle or snippet). Requires MUSIXMATCH_API_KEY on the server.",
+    example: `GET /tracks/jamendo_1007926/lyrics
+
+→ {
+  "track_id": "jamendo_1007926",
+  "lines": [
+    {
+      "t_ms": 42040,
+      "text": "And save it for a rainy day",
+      "line_index": 0,
+      "end_ms": 45760
+    },
+    {
+      "t_ms": 66000,
+      "text": "Shadows in the moonlight",
+      "line_index": 1,
+      "end_ms": null
+    }
+  ],
+  "lyrics_copyright": "© …",
+  "pixel_tracking_url": "https://…",
+  "source": "subtitle"
+}`,
+  },
+  {
+    id: "analysis",
+    method: "GET",
+    path: "/tracks/{id}/analysis",
+    summary: "Musixmatch rich-sync analysis payload for a track (word-level timing when available).",
+    example: `GET /tracks/jamendo_1007926/analysis
+
+→ {
+  "track_id": "jamendo_1007926",
+  "analysis": { … }
+}`,
+  },
+  {
+    id: "prefetch-lyrics",
+    method: "POST",
+    path: "/prefetch/lyrics",
+    summary:
+      "Lyric-aware crossfade anchors for L1 candidates: exit/entry line boundaries and aligned crossfade window.",
+    example: `POST /prefetch/lyrics
+Content-Type: application/json
+
+{
+  "current": { "track_id": "jamendo_1007926", "t_ms": 95000 },
+  "candidates_l1": {
+    "3": [{ "track_id": "jamendo_1036435", "audio_start_ms": 12400, "score": 0.87 }]
+  }
+}
+
+→ {
+  "intents": {
+    "3": {
+      "track_id": "jamendo_1036435",
+      "title": "…",
+      "artist": "…",
+      "score_l1": 0.87,
+      "exit_anchor": { "line_index": 12, "t_ms": 97200, "text": "…" },
+      "entry_anchor": { "line_index": 0, "t_ms": 12400, "text": "…" },
+      "crossfade": {
+        "crossfade_start_ms": 93200,
+        "crossfade_duration_ms": 8000,
+        "audio_start_ms": 12300,
+        "entry_t_ms": 12400,
+        "exit_t_ms": 97200
+      },
+      "lyrics_copyright": "© …",
+      "pixel_tracking_url": "https://…"
+    }
+  }
+}`,
+  },
+];
+
+const SYSTEM: ApiItem[] = [
+  {
+    id: "health",
+    method: "GET",
+    path: "/health",
+    summary: "Service status, catalog summary, and play-stats availability.",
+    example: `GET /health
+
+→ {
+  "status": "ok",
+  "service": "moony-api",
+  "catalog": {
+    "track_count": 120,
+    "segment_count": 840,
+    "with_musixmatch": 95,
+    "lyrics_mode": "musixmatch",
+    "matcher": "moss",
+    "analyzer": "cyanite"
+  },
+  "play_stats": { "enabled": true, "total_plays": 4821 }
+}`,
+  },
+  {
+    id: "catalog-stats",
+    method: "GET",
+    path: "/catalog/stats",
+    summary: "Catalog metadata: mood distribution, energy coverage, embedding stats.",
+    example: `GET /catalog/stats
+
+→ {
+  "catalog_name": "jamendo-demo",
+  "track_count": 120,
+  "segment_count": 840,
+  "mood_labels": ["calm", "happy", "energetic", …],
+  "with_energy": 118,
+  "energy_coverage": 0.98,
+  "with_musixmatch": 95,
+  "bpm_range": { "min": 72, "max": 168 }
+}`,
+  },
+  {
+    id: "play-count",
+    method: "GET",
+    path: "/tracks/{id}/play-count",
+    summary: "Global play count for a track (when play stats are enabled).",
+    example: `GET /tracks/jamendo_1007926/play-count
+
+→ {
+  "track_id": "jamendo_1007926",
+  "play_count": 42,
+  "stats_enabled": true
+}`,
+  },
+  {
+    id: "played",
+    method: "POST",
+    path: "/tracks/{id}/played",
+    summary: "Increment global play count when the client actually starts playback.",
+    example: `POST /tracks/jamendo_1007926/played
+
+→ {
+  "track_id": "jamendo_1007926",
+  "play_count": 43,
+  "stats_enabled": true
 }`,
   },
 ];
@@ -320,8 +531,8 @@ Content-Type: application/json
         </section>
 
         <p className="text-sm leading-relaxed text-white/55">
-          Core Moony endpoints for catalog owners integrating segment-level mood data and adaptive
-          playback. Tap an endpoint to see a usage example.
+          Core Moony endpoints for catalog owners integrating segment-level mood data, adaptive
+          playback, and synced lyrics. Tap an endpoint to see a usage example.
         </p>
 
         <ApiGroup
@@ -336,6 +547,22 @@ Content-Type: application/json
           title="Player & navigation"
           intro="Drive mood-adaptive listening sessions in your app."
           items={PLAYER}
+          openId={openId}
+          onToggle={toggle}
+        />
+
+        <ApiGroup
+          title="Lyrics & sync"
+          intro="Musixmatch-powered lyric lines and crossfade anchors (server key required)."
+          items={LYRICS}
+          openId={openId}
+          onToggle={toggle}
+        />
+
+        <ApiGroup
+          title="System & stats"
+          intro="Health checks, catalog metadata, and optional global play counts."
+          items={SYSTEM}
           openId={openId}
           onToggle={toggle}
         />
