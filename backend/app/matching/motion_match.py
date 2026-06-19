@@ -213,9 +213,14 @@ def _best_motion_entry_in_segments(
     segment_indices: list[int],
     *,
     after_t_sec: float | None = None,
+    relax_entry_eligibility: bool = False,
 ) -> tuple[int, VA, int] | None:
     """Closest motion frame inside ``segment_indices`` (no emotion_label filter)."""
-    segment_indices = eligible_entry_indices(track, without_outro_indices(track, segment_indices))
+    non_outro = without_outro_indices(track, segment_indices)
+    if relax_entry_eligibility:
+        segment_indices = non_outro or segment_indices[:1]
+    else:
+        segment_indices = eligible_entry_indices(track, non_outro)
     if not segment_indices:
         return None
 
@@ -326,6 +331,24 @@ def best_target_entry_for_emotion(
     start_ms = clamp_start_ms_before_outro(track, int(round(t_sec * 1000)))
     entry_va = VA(v=sample.valence, ar=sample.arousal)
     return start_ms, entry_va, segment_index_at_ms(track, start_ms)
+
+
+def best_fallback_va_entry_on_track(
+    track: Track,
+    target: VA,
+    *,
+    after_t_sec: float | None = None,
+) -> tuple[int, VA, int] | None:
+    """Closest V/A entry when strict entry-position rules leave no candidates."""
+    if not track.segments:
+        return None
+    return _best_motion_entry_in_segments(
+        track,
+        target,
+        list(range(len(track.segments))),
+        after_t_sec=after_t_sec,
+        relax_entry_eligibility=True,
+    )
 
 
 def best_target_entry_on_track(

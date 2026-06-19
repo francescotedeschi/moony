@@ -74,10 +74,7 @@ async def match_track(body: MatchRequest) -> MatchResponse:
             embedding_penalties=embedding_penalties,
         )
     if not result:
-        raise HTTPException(
-            status_code=404,
-            detail="No matching track found for target emotion in catalog",
-        )
+        raise HTTPException(status_code=404, detail="No playable tracks in catalog")
 
     track, seg, _idx, score, start_ms, entry_va, mood_distance, mood_quality, target_emotion = (
         result

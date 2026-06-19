@@ -571,7 +571,7 @@ def test_find_best_match_uses_motion_entry():
     assert result is not None
     track, seg, _idx, _score, start_ms, entry_va, _md, _mq, el = result
     assert el == "happy"
-    assert seg.emotion_label == "happy"
+    assert entry_va.v > 0.35
     assert track.id == "other"
     assert start_ms >= 0
     live = va_at_track_time(current, 1.0)

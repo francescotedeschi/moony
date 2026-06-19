@@ -40,7 +40,9 @@ from app.play_stats.fairness import (
     play_fairness_tier,
 )
 from app.matching.motion_match import (
+    best_fallback_va_entry_on_track,
     best_target_entry_for_emotion,
+    best_target_entry_on_track,
     effective_segment_emotion_label,
     motion_va_at_segment_start,
     segment_index_at_ms,
@@ -666,6 +668,93 @@ def _pick_best_from_pool(
     return best
 
 
+def _find_closest_va_match(
+    tracks: list[Track],
+    *,
+    user_target: VA,
+    search_target: VA,
+    bpm_current: int,
+    exclude_ids: set[str],
+    current_track: Track | None,
+    current_t_ms: int | None,
+    pad_only: bool,
+    cur_emb: list[float] | None,
+    counts: dict[str, int],
+    embedding_penalties: list[WeightedEmbedding] | None = None,
+) -> tuple[Track, Segment, int, float, int, VA, float, str, str] | None:
+    """Closest V/A entry on any eligible segment when strict emotion pools are empty."""
+    current_id = current_track.id if current_track else None
+    exclude_attempts: list[set[str]] = [set(exclude_ids)]
+    minimal: set[str] = set()
+    if current_id:
+        minimal.add(current_id)
+    if minimal != exclude_ids:
+        exclude_attempts.append(minimal)
+    if exclude_ids:
+        exclude_attempts.append(set())
+
+    for ex in exclude_attempts:
+        best: tuple[Track, Segment, int, float, int, VA, float, str, str] | None = None
+        for track in tracks:
+            if track.id in ex or not track.segments:
+                continue
+
+            after_t_sec: float | None = None
+            if (
+                not pad_only
+                and current_id is not None
+                and current_t_ms is not None
+                and track.id == current_id
+            ):
+                after_t_sec = current_t_ms / 1000.0 + SAME_TRACK_AHEAD_SEC
+
+            entry = best_fallback_va_entry_on_track(
+                track, search_target, after_t_sec=after_t_sec
+            )
+            if entry is None:
+                continue
+            start_ms, entry_va, idx = entry
+            seg = track.segments[idx]
+            actual_label = effective_segment_emotion_label(seg)
+            score, mood_dist = _score_candidate(
+                user_target,
+                entry_va,
+                bpm_current,
+                track.bpm,
+                track=track,
+                target_emotion_label=actual_label,
+                current_embedding=cur_emb,
+                candidate_embedding=list(seg.embedding) if seg.embedding else None,
+                play_count=counts.get(track.id, 0),
+                embedding_penalties=embedding_penalties,
+                candidate_segment=seg,
+            )
+            quality = mood_quality(mood_dist)
+            candidate = (
+                track,
+                seg,
+                idx,
+                score,
+                start_ms,
+                entry_va,
+                mood_dist,
+                quality,
+                actual_label,
+            )
+
+            if best is None:
+                best = candidate
+            elif score > best[3]:
+                best = candidate
+            elif score == best[3] and counts.get(track.id, 0) < counts.get(best[0].id, 0):
+                best = candidate
+
+        if best is not None:
+            return best
+
+    return None
+
+
 def find_best_match(
     tracks: Iterable[Track],
     user_target: VA,
@@ -685,22 +774,25 @@ def find_best_match(
     mood_quality, target_emotion_label).
     """
     restrict_mood_share = False
+    resolved_same_mood = False
     if same_mood_handoff:
         ctx = _same_mood_search_context(current_track, current_t_ms)
-        if ctx is None:
-            return None
-        branch_target, search_target, target_label = ctx
-        user_target = branch_target
-        restrict_mood_share = True
-    elif pad_only or current_track is None or current_t_ms is None:
-        search_target, branch = resolve_search_target(user_target)
-        target_label = emotion_label_for_branch(branch)
-    else:
-        search_target, target_label = _resolve_forward_search_target(
-            user_target,
-            current_track=current_track,
-            current_t_ms=current_t_ms,
-        )
+        if ctx is not None:
+            branch_target, search_target, target_label = ctx
+            user_target = branch_target
+            restrict_mood_share = True
+            resolved_same_mood = True
+
+    if not resolved_same_mood:
+        if pad_only or current_track is None or current_t_ms is None:
+            search_target, branch = resolve_search_target(user_target)
+            target_label = emotion_label_for_branch(branch)
+        else:
+            search_target, target_label = _resolve_forward_search_target(
+                user_target,
+                current_track=current_track,
+                current_t_ms=current_t_ms,
+            )
     current_id = current_track.id if current_track else None
     cur_seg = _current_segment(current_track, current_t_ms)
     cur_emb = list(cur_seg.embedding) if cur_seg and cur_seg.embedding else None
@@ -711,7 +803,7 @@ def find_best_match(
         target_emotion_label=target_label,
         target_va=search_target,
     )
-    if same_mood_handoff and current_track is not None:
+    if resolved_same_mood and current_track is not None:
         effective_excludes.add(current_track.id)
     counts = play_counts or {}
     track_list = list(tracks)
@@ -719,7 +811,7 @@ def find_best_match(
     for ex, restrict in _match_exclude_attempts(
         effective_excludes,
         restrict_mood_share,
-        same_mood_handoff=same_mood_handoff,
+        same_mood_handoff=resolved_same_mood,
         pad_only=pad_only,
         current_id=current_id,
     ):
@@ -748,7 +840,19 @@ def find_best_match(
         if best is not None:
             return best
 
-    return None
+    return _find_closest_va_match(
+        track_list,
+        user_target=user_target,
+        search_target=search_target,
+        bpm_current=bpm_current,
+        exclude_ids=effective_excludes,
+        current_track=current_track,
+        current_t_ms=current_t_ms,
+        pad_only=pad_only,
+        cur_emb=cur_emb,
+        counts=counts,
+        embedding_penalties=embedding_penalties,
+    )
 
 
 def _pick_joy_session_opener(
@@ -829,13 +933,26 @@ def find_session_seed(
             continue
         eligible.append(track)
 
+    counts = play_counts or {}
+    track_list = list(tracks)
+
     if not eligible:
-        return None
+        return _find_closest_va_match(
+            track_list,
+            user_target=pad_target,
+            search_target=pad_target,
+            bpm_current=120,
+            exclude_ids=exclude_ids,
+            current_track=None,
+            current_t_ms=None,
+            pad_only=True,
+            cur_emb=None,
+            counts=counts,
+        )
 
     with_subtitles = [track for track in eligible if track_has_synced_subtitles(track)]
     search_pool = with_subtitles or eligible
 
-    counts = play_counts or {}
     play_tiers = sorted({counts.get(track.id, 0) for track in search_pool})
     for tier_plays in play_tiers:
         tier = [track for track in search_pool if counts.get(track.id, 0) == tier_plays]
@@ -851,7 +968,18 @@ def find_session_seed(
         if result is not None:
             return result
 
-    return None
+    return _find_closest_va_match(
+        track_list,
+        user_target=pad_target,
+        search_target=pad_target,
+        bpm_current=120,
+        exclude_ids=exclude_ids,
+        current_track=None,
+        current_t_ms=None,
+        pad_only=True,
+        cur_emb=None,
+        counts=counts,
+    )
 
 
 def find_joy_session_seed(

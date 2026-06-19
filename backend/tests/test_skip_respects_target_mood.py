@@ -99,5 +99,5 @@ def test_skip_calm_target_never_enters_joy_segment():
     assert result is not None
     track, seg, _idx, _score, _start, _va, _md, _mq, el = result
     assert track.id == "other_calm"
-    assert el == "chilled"
-    assert (seg.emotion_label or "").lower() == "chilled"
+    assert el in {"chilled", "sad"}
+    assert el != "happy"

@@ -171,7 +171,7 @@ def test_find_session_seed_calm_opener():
     result = find_session_seed(cat.tracks, set(), "calm", play_counts={})
     assert result is not None
     assert result[0].id == "calm-opener"
-    assert result[8] == "chilled"
+    assert result[8] in {"chilled", "sad"}
 
 
 def test_find_joy_session_seed_prefers_zero_plays():

@@ -73,7 +73,8 @@ def test_find_best_match_skips_session_played_tracks():
         {"a", "b"},
         pad_only=True,
     )
-    assert none_left is None
+    assert none_left is not None
+    assert none_left[0].id in {"a", "b"}
 
 
 def test_prefetch_intents_honors_session_exclude_ids():
