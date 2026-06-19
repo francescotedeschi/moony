@@ -12,8 +12,8 @@ describe("resolveLyricsSyncMs", () => {
     const gate = createLyricsSyncGate();
     const entry = 45_000;
 
-    expect(resolveLyricsSyncMs(gate, 0, "track-a", entry)).toBe(entry);
-    expect(resolveLyricsSyncMs(gate, 2_500, "track-a", entry)).toBe(entry);
+    expect(resolveLyricsSyncMs(gate, 0, "track-a", entry)).toBe(0);
+    expect(resolveLyricsSyncMs(gate, 2_500, "track-a", entry)).toBe(2_500);
     expect(gate.trustClock).toBe(false);
   });
 
@@ -109,5 +109,16 @@ describe("resolveLyricsSyncMs", () => {
     expect(gate.trustClock).toBe(true);
 
     expect(resolveLyricsSyncMs(gate, 12_000, "track-a", 0)).toBe(12_000);
+  });
+
+  it("follows live playback before the matched entry point", () => {
+    const gate = createLyricsSyncGate();
+    const entry = 45_000;
+
+    expect(resolveLyricsSyncMs(gate, 8_000, "track-a", entry)).toBe(8_000);
+    expect(gate.trustClock).toBe(false);
+
+    expect(resolveLyricsSyncMs(gate, 46_000, "track-a", entry)).toBe(46_000);
+    expect(gate.trustClock).toBe(true);
   });
 });

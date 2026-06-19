@@ -38,28 +38,30 @@ export function resolveLyricsSyncMs(
   if (!gate.trustClock) {
     const farAhead = entry > 0 && currentMs > entry + LYRICS_TRUST_WINDOW_MS;
 
-    const alignedToEntry =
-      entry <= 0
-        ? currentMs <= LYRICS_TRUST_WINDOW_MS
-        : Math.abs(currentMs - entry) <= LYRICS_ENTRY_TOLERANCE_MS;
-
-    const advancingFromEntry =
-      entry > 0 &&
-      currentMs >= entry - LYRICS_ENTRY_TOLERANCE_MS &&
-      currentMs <= entry + LYRICS_TRUST_WINDOW_MS;
-
-    if (alignedToEntry || advancingFromEntry) {
-      gate.trustClock = true;
-      gate.holdFarAheadReads = 0;
-      return currentMs;
-    }
-
     if (farAhead) {
       if (gate.holdFarAheadReads > 0) {
         gate.holdFarAheadReads -= 1;
         return entry;
       }
       gate.trustClock = true;
+      return currentMs;
+    }
+
+    const alignedToEntry =
+      entry <= 0
+        ? currentMs <= LYRICS_TRUST_WINDOW_MS
+        : Math.abs(currentMs - entry) <= LYRICS_ENTRY_TOLERANCE_MS;
+
+    const passedEntry = entry > 0 && currentMs >= entry - LYRICS_ENTRY_TOLERANCE_MS;
+
+    if (alignedToEntry || passedEntry) {
+      gate.trustClock = true;
+      gate.holdFarAheadReads = 0;
+      return currentMs;
+    }
+
+    // Audio still before the matched entry — follow live position, not future entry.
+    if (entry > 0 && currentMs < entry - LYRICS_ENTRY_TOLERANCE_MS) {
       return currentMs;
     }
 

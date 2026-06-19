@@ -56,6 +56,35 @@ export function activeLineIndex(
   return result;
 }
 
+/**
+ * Pad overlay line: follow activeLineIndex (karaoke hold) instead of hiding at end_ms
+ * while the next line is still upcoming. Still honors empty-marker gaps when end_ms
+ * ends before the next lyric timestamp.
+ */
+export function padLyricLineAtTime(
+  lines: PreparedLyricLine[],
+  currentMs: number,
+  leadMs = LYRICS_SYNC_LEAD_MS,
+): PreparedLyricLine | null {
+  if (!lines.length) return null;
+  if (currentMs + leadMs < lines[0]!.t_ms) return null;
+
+  let idx = activeLineIndex(lines, currentMs, leadMs);
+  while (idx >= 0 && !lines[idx]!.text.trim()) {
+    idx -= 1;
+  }
+  if (idx < 0) return null;
+
+  const line = lines[idx]!;
+  if (
+    currentMs >= line.end_ms &&
+    (idx + 1 >= lines.length || line.end_ms < lines[idx + 1]!.t_ms)
+  ) {
+    return null;
+  }
+  return line;
+}
+
 /** Line to show at playback time, or null when no timed text should appear. */
 export function lyricAtTime(
   lines: LyricLine[] | PreparedLyricLine[],

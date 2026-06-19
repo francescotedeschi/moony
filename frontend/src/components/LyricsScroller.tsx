@@ -6,6 +6,7 @@ import {
   activeLineIndex,
   hasSyncedLyrics,
   lyricAtTime,
+  padLyricLineAtTime,
   prepareLyricLines,
   type LyricLine,
 } from "../lib/lyricsSync";
@@ -52,8 +53,13 @@ export function LyricsScroller({
   const syncMs = useLyricsSyncMs(currentMs, trackId, entryMs);
   const prepared = useMemo(() => prepareLyricLines(lines), [lines]);
   const syncedLine = useMemo(
-    () => (syncPlayback ? lyricAtTime(prepared, syncMs) : null),
-    [prepared, syncMs, syncPlayback],
+    () =>
+      syncPlayback
+        ? variant === "pad"
+          ? padLyricLineAtTime(prepared, syncMs)
+          : lyricAtTime(prepared, syncMs)
+        : null,
+    [prepared, syncMs, syncPlayback, variant],
   );
   const computedActiveIdx = useMemo(
     () => activeLineIndex(prepared, syncMs),

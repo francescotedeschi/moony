@@ -3,6 +3,7 @@ import {
   hasLyricsAtTime,
   LYRICS_SYNC_LEAD_MS,
   lyricAtTime,
+  padLyricLineAtTime,
   prepareLyricLines,
 } from "./lyricsSync";
 
@@ -63,5 +64,24 @@ describe("hasLyricsAtTime", () => {
     expect(
       lyricAtTime(lines, 6_000, LYRICS_SYNC_LEAD_MS, { vocalLevel: 0.5 })?.text,
     ).toBe("First line");
+  });
+});
+
+describe("padLyricLineAtTime", () => {
+  it("keeps the active line visible until the next lyric starts", () => {
+    const prepared = prepareLyricLines(lines);
+    expect(padLyricLineAtTime(prepared, 11_800)?.text).toBe("First line");
+    expect(padLyricLineAtTime(prepared, 12_000)?.text).toBe("Second line");
+  });
+
+  it("still hides during empty-marker instrumental gaps", () => {
+    const withEnds = [
+      { t_ms: 42_040, text: "And save it for a rainy day", line_index: 0, end_ms: 45_760 },
+      { t_ms: 66_000, text: "Shadows in the moonlight", line_index: 1, end_ms: 75_060 },
+    ];
+    const prepared = prepareLyricLines(withEnds);
+    expect(padLyricLineAtTime(prepared, 44_000)?.text).toBe("And save it for a rainy day");
+    expect(padLyricLineAtTime(prepared, 50_000)).toBeNull();
+    expect(padLyricLineAtTime(prepared, 66_500)?.text).toBe("Shadows in the moonlight");
   });
 });
