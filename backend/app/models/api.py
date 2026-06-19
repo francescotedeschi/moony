@@ -100,6 +100,8 @@ class LyricLine(BaseModel):
     t_ms: int
     text: str
     line_index: int
+    """When Musixmatch inserts an empty timed marker, the line ends there instead of at the next lyric."""
+    end_ms: int | None = None
 
 
 class LyricsResponse(BaseModel):

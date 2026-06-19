@@ -211,7 +211,7 @@ export type EmbeddingPenaltyRange = {
 
 export type LyricsResponse = {
   track_id: string;
-  lines: { t_ms: number; text: string; line_index: number }[];
+  lines: { t_ms: number; text: string; line_index: number; end_ms?: number | null }[];
   lyrics_copyright: string;
   pixel_tracking_url?: string;
   source: string;

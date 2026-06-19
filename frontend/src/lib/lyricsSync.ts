@@ -1,4 +1,9 @@
-export type LyricLine = { t_ms: number; text: string; line_index: number };
+export type LyricLine = {
+  t_ms: number;
+  text: string;
+  line_index: number;
+  end_ms?: number | null;
+};
 
 export type PreparedLyricLine = LyricLine & { end_ms: number };
 
@@ -18,9 +23,10 @@ export function prepareLyricLines(lines: LyricLine[]): PreparedLyricLine[] {
   return sorted.map((line, index) => ({
     ...line,
     end_ms:
-      index + 1 < sorted.length
+      line.end_ms ??
+      (index + 1 < sorted.length
         ? sorted[index + 1].t_ms
-        : line.t_ms + 12_000,
+        : line.t_ms + 12_000),
   }));
 }
 

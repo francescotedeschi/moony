@@ -209,6 +209,20 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   ]);
 }
 
+const MOBILE_BREAKPOINT_PX = 767;
+const SCROLL_COMPACT_ENTER_PX = 48;
+const SCROLL_COMPACT_EXIT_PX = 16;
+
+function isMobileViewport(): boolean {
+  return window.innerWidth <= MOBILE_BREAKPOINT_PX;
+}
+
+function landingHeaderCompactFromScroll(current: boolean): boolean {
+  if (isMobileViewport()) return false;
+  const y = window.scrollY;
+  return current ? y > SCROLL_COMPACT_EXIT_PX : y > SCROLL_COMPACT_ENTER_PX;
+}
+
 export default function App() {
   const [lyricsMode, setLyricsMode] = useState<string>("off");
   const lyricsModeRef = useRef(lyricsMode);
@@ -2044,7 +2058,7 @@ export default function App() {
 
   /** Compact header + tighter layout once the first track card can render. */
   const sessionLayoutActive = Boolean(nowPlaying);
-  const compactLayout = sessionLayoutActive || landingHeaderCompact;
+  const headerCompact = sessionLayoutActive || landingHeaderCompact;
   const onDismissFeatureTip = useCallback(() => {
     if (featureTip?.id === "matches") markMatchesDiscovered();
     dismissFeatureTip();
@@ -2053,18 +2067,11 @@ export default function App() {
   const subtitleHidden = Boolean(loading || nowPlaying || landingHeaderCompact);
 
   useEffect(() => {
-    const SCROLL_COMPACT_THRESHOLD_PX = 40;
-    const MOBILE_BREAKPOINT = 767;
-
     const syncLandingHeaderCompact = () => {
-      // On mobile the header is always in document flow and scrolls with the
-      // page — no scroll-triggered compact state. The only layout switch on
-      // mobile is when music is actually playing (sessionLayoutActive).
-      if (window.innerWidth <= MOBILE_BREAKPOINT) {
-        setLandingHeaderCompact(false);
-        return;
-      }
-      setLandingHeaderCompact(window.scrollY > SCROLL_COMPACT_THRESHOLD_PX);
+      setLandingHeaderCompact((current) => {
+        const next = landingHeaderCompactFromScroll(current);
+        return next === current ? current : next;
+      });
     };
 
     syncLandingHeaderCompact();
@@ -2081,11 +2088,10 @@ export default function App() {
   useEffect(() => {
     const PAD_PX = 600;
     const PAD_MARGIN_PX = 80; // 5rem side padding
-    const MOBILE_BREAKPOINT = 767;
 
     const update = () => {
       const vw = window.innerWidth;
-      if (vw > MOBILE_BREAKPOINT) {
+      if (vw > MOBILE_BREAKPOINT_PX) {
         document.documentElement.style.removeProperty("--moony-pad-scale");
         return;
       }
@@ -2100,7 +2106,10 @@ export default function App() {
 
   useEffect(() => {
     if (!nowPlaying) {
-      setLandingHeaderCompact(window.scrollY > 40);
+      setLandingHeaderCompact((current) => {
+        const next = landingHeaderCompactFromScroll(current);
+        return next === current ? current : next;
+      });
     }
   }, [nowPlaying]);
 
@@ -2122,15 +2131,15 @@ export default function App() {
       />
       <div
         className={`moony-app-shell mx-auto flex min-h-screen flex-col px-6${
-          compactLayout ? " moony-app--playing" : " moony-app--landing"
-        }${nowPlaying ? " moony-app--has-dock" : ""}${
+          sessionLayoutActive ? " moony-app--playing" : " moony-app--landing"
+        }${sessionLayoutActive ? " moony-app--session" : ""}${nowPlaying ? " moony-app--has-dock" : ""}${
           showSyncedMatches && nowPlaying ? " moony-app--has-matches" : ""
         }`}
         style={{ maxWidth: FLUID_PAD_WRAPPER_PX + 48 }}
       >
       <header
         className={`moony-header${subtitleHidden ? " moony-header--subtitle-hidden" : ""}${
-          compactLayout ? " moony-header--playing" : ""
+          headerCompact ? " moony-header--playing" : ""
         }`}
       >
         <div className="moony-header-brand">
@@ -2153,7 +2162,7 @@ export default function App() {
 
       <section
         className={`moony-player-section mx-auto flex flex-col items-center${
-          compactLayout ? " moony-player-section--playing" : ""
+          sessionLayoutActive ? " moony-player-section--playing" : ""
         }`}
         style={{ width: FLUID_PAD_WRAPPER_PX }}
       >

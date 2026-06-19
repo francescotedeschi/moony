@@ -966,9 +966,10 @@ export function useAudioEngine() {
     const el = activeEl();
     if (!el) return;
     el.currentTime = 0;
+    syncPlaybackClock();
     if (el.paused) await el.play();
     setIsPlaying(true);
-  }, []);
+  }, [syncPlaybackClock]);
 
   const samplePlaybackLinearPeak = useCallback((): number => {
     const analyser = analyserRef.current;
@@ -1016,6 +1017,7 @@ export function useAudioEngine() {
     rewind,
     seekToMs,
     alignPlaybackClock,
+    syncPlaybackClock,
     ensureContext,
     setOnTrackEnded,
     isPlaying,

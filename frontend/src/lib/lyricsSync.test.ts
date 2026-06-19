@@ -45,6 +45,17 @@ describe("hasLyricsAtTime", () => {
     expect(lyricAtTime(lines, 4_000)).toBeNull();
   });
 
+  it("honors API-provided end_ms for empty LRC markers", () => {
+    const withEnds = [
+      { t_ms: 42_040, text: "And save it for a rainy day", line_index: 0, end_ms: 45_760 },
+      { t_ms: 66_000, text: "Shadows in the moonlight", line_index: 1, end_ms: 75_060 },
+    ];
+    const prepared = prepareLyricLines(withEnds);
+    expect(hasLyricsAtTime(prepared, 44_000)).toBe(true);
+    expect(hasLyricsAtTime(prepared, 46_000)).toBe(false);
+    expect(hasLyricsAtTime(prepared, 66_500)).toBe(true);
+  });
+
   it("hides lyrics during instrumental gaps inside a timed line window", () => {
     expect(
       lyricAtTime(lines, 6_000, LYRICS_SYNC_LEAD_MS, { vocalLevel: 0.2 }),

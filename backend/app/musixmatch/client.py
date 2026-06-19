@@ -80,8 +80,8 @@ class MusixmatchClient:
 
     @staticmethod
     def parse_lrc(body: str) -> list[LyricLine]:
-        lines: list[LyricLine] = []
-        for i, raw in enumerate(body.strip().splitlines()):
+        events: list[tuple[int, str]] = []
+        for raw in body.strip().splitlines():
             stripped = raw.strip()
             if not stripped:
                 continue
@@ -89,17 +89,29 @@ class MusixmatchClient:
             if not timestamps:
                 continue
             text = LRC_TIMESTAMP.sub("", stripped).strip()
-            if not text:
-                continue
             for match in timestamps:
                 mm, ss, frac = match.groups()
                 t_ms = _lrc_timestamp_ms(mm, ss, frac)
-                lines.append(LyricLine(t_ms=t_ms, text=text, line_index=len(lines)))
-        lines.sort(key=lambda line: (line.t_ms, line.line_index))
-        return [
-            LyricLine(t_ms=line.t_ms, text=line.text, line_index=idx)
-            for idx, line in enumerate(lines)
-        ]
+                events.append((t_ms, text))
+
+        events.sort(key=lambda item: item[0])
+        timed = [(t_ms, text) for t_ms, text in events if text]
+        lines: list[LyricLine] = []
+        for t_ms, text in timed:
+            later = [event for event in events if event[0] > t_ms]
+            if not later:
+                end_ms = t_ms + 12_000
+            else:
+                end_ms = later[0][0]
+            lines.append(
+                LyricLine(
+                    t_ms=t_ms,
+                    text=text,
+                    line_index=len(lines),
+                    end_ms=end_ms,
+                )
+            )
+        return lines
 
     async def get_subtitle_lines(
         self,

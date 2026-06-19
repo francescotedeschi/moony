@@ -67,15 +67,6 @@ body {
 }
 
 .moony-header {
-  --moony-title-size-playing: clamp(2.25rem, 6vw, 3.375rem);
-  --moony-header-play-top: 0.85rem;
-  --moony-header-play-gap: 0.15rem;
-  --moony-ease-smooth: cubic-bezier(0.19, 1, 0.22, 1);
-  --moony-ease-soft-out: cubic-bezier(0.33, 1, 0.68, 1);
-  --moony-subtitle-hide-duration: 0.58s;
-  --moony-logo-move-delay: 0.58s;
-  --moony-logo-move-duration: 1.35s;
-  --moony-header-motion: var(--moony-logo-move-duration) var(--moony-ease-smooth);
   position: fixed;
   inset: 0 0 auto;
   z-index: 54;
@@ -196,7 +187,7 @@ body {
     transform var(--moony-subtitle-hide-duration) var(--moony-ease-soft-out),
     filter var(--moony-subtitle-hide-duration) var(--moony-ease-soft-out);
   transform-origin: top center;
-  transition-delay: var(--moony-logo-move-delay);
+  transition-delay: 0s;
 }
 
 .moony-header--subtitle-hidden .moony-header-subtitle {
@@ -223,7 +214,7 @@ body {
     letter-spacing: 0.028em;
   }
 
-  .moony-header {
+  .moony-app-shell {
     --moony-title-size-playing: clamp(2.0625rem, 8.4vw, 3rem);
     --moony-header-play-top: 0.75rem;
   }
@@ -243,8 +234,17 @@ body {
 }
 
 .moony-app-shell {
+  --moony-ease-smooth: cubic-bezier(0.19, 1, 0.22, 1);
+  --moony-ease-soft-out: cubic-bezier(0.33, 1, 0.68, 1);
+  --moony-subtitle-hide-duration: 0.58s;
+  --moony-logo-move-delay: 0.58s;
+  --moony-logo-move-duration: 1.35s;
+  --moony-header-motion: var(--moony-logo-move-duration) var(--moony-ease-smooth);
   --moony-title-size-landing: clamp(2.4375rem, 7.8vw, 4.5rem);
+  --moony-title-size-playing: clamp(2.25rem, 6vw, 3.375rem);
   --moony-landing-brand-top: clamp(2rem, 9vh, 4.25rem);
+  --moony-header-play-top: 0.85rem;
+  --moony-header-play-gap: 0.15rem;
   --moony-subtitle-gap: clamp(0.875rem, 2.5vw, 1.35rem);
   --moony-subtitle-stack: clamp(5rem, 14vw, 7rem);
   --moony-header-pad-gap: clamp(1.25rem, 4vh, 2.25rem);
@@ -679,10 +679,25 @@ body {
       margin-top calc(var(--moony-subtitle-hide-duration) + 0.08s) var(--moony-ease-soft-out),
       transform var(--moony-subtitle-hide-duration) var(--moony-ease-soft-out),
       filter var(--moony-subtitle-hide-duration) var(--moony-ease-soft-out);
-    transition-delay: var(--moony-logo-move-delay);
+    transition-delay: 0s;
   }
 
+  /*
+   * Desktop: scroll only compacts the fixed header — shell padding stays in
+   * landing layout until a session starts, so padding snaps cannot reset
+   * scrollY and bounce the animation back.
+   */
   .moony-app-shell {
+    transition-property: padding-bottom;
+    transition-duration: var(--moony-logo-move-duration);
+    transition-timing-function: var(--moony-ease-smooth);
+  }
+
+  .moony-player-section {
+    transition: none;
+  }
+
+  .moony-app--session.moony-app-shell {
     transition:
       padding-top var(--moony-header-motion),
       gap var(--moony-header-motion),
@@ -690,10 +705,26 @@ body {
     transition-delay: 0s;
     transition-timing-function: var(--moony-ease-smooth);
   }
+
+  .moony-app--session.moony-app-shell .moony-player-section {
+    transition: gap var(--moony-header-motion);
+    transition-delay: 0s;
+    transition-timing-function: var(--moony-ease-smooth);
+  }
+
+  .moony-app--landing .moony-header {
+    position: fixed;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .moony-app--landing .moony-header-brand {
+    position: fixed;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .moony-header {
+  .moony-app-shell {
     --moony-logo-move-delay: 0s;
   }
 
