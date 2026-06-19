@@ -33,7 +33,16 @@ export function resolvePadLyricsDisplay(
     };
   }
 
-  if (prev?.trackId !== nowPlaying.track_id) {
+  if (!prev) {
+    return null;
+  }
+
+  // Crossfade handoff: keep outgoing lyrics scrolling until the next track loads.
+  if (prev.trackId !== nowPlaying.track_id && trackLyrics.loading) {
+    return prev;
+  }
+
+  if (prev.trackId !== nowPlaying.track_id) {
     return null;
   }
 

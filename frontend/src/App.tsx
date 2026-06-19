@@ -269,6 +269,9 @@ export default function App() {
     lyricsMode === "musixmatch" && Boolean(nowPlaying?.track_id),
   );
   const padLyrics = usePadLyricsDisplay(nowPlaying, trackLyrics, lyricsMode);
+  const padLyricsHandoff = Boolean(
+    padLyrics && nowPlaying && padLyrics.trackId !== nowPlaying.track_id,
+  );
   const padLyricsReadyForTrack = Boolean(
     nowPlaying &&
       !trackLyrics.loading &&
@@ -278,9 +281,8 @@ export default function App() {
   const padLyricsSyncPlayback = Boolean(
     padLyrics &&
       nowPlaying &&
-      padLyrics.trackId === nowPlaying.track_id &&
-      padLyricsReadyForTrack &&
-      !audio.isCrossfading,
+      (padLyricsReadyForTrack ||
+        (padLyricsHandoff && hasSyncedLyrics(padLyrics.source, padLyrics.lines))),
   );
   const padRef = useRef<EmotionPadHandle>(null);
   const dragRef = useRef(false);
@@ -2194,7 +2196,9 @@ export default function App() {
               variant="pad"
               trackId={padLyrics.trackId}
               lines={padLyrics.lines}
-              playbackStore={audio.lyricsPlaybackStore}
+              playbackStore={
+                padLyricsHandoff ? audio.outgoingPlaybackStore : audio.lyricsPlaybackStore
+              }
               entryMs={padLyrics.entryMs}
               pixelUrl={padLyrics.pixelUrl}
               source={padLyrics.source}

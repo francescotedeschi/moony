@@ -215,6 +215,8 @@ export function useAudioEngine() {
   const peakMeterBufferRef = useRef<Float32Array | null>(null);
   const graphsRef = useRef<Partial<Record<Bus, BusGraph>>>({});
   const playbackStoreRef = useRef(createPlaybackStore());
+  /** Outgoing bus time during crossfade / lyric handoff. */
+  const outgoingPlaybackStoreRef = useRef(createPlaybackStore());
   /** Incoming bus time during crossfade — keeps pad lyrics on the new track clock. */
   const lyricsPlaybackStoreRef = useRef(createPlaybackStore());
   const preloadedRef = useRef<PreloadedTrack | null>(null);
@@ -333,10 +335,26 @@ export function useAudioEngine() {
     return readPlaybackMs();
   }, [readPlaybackMs]);
 
+  const readOutgoingPlaybackMs = useCallback((): number => {
+    if (crossfadeActiveRef.current) {
+      const outEl = getBus(activeRef.current);
+      if (outEl && Number.isFinite(outEl.currentTime)) {
+        return Math.round(outEl.currentTime * 1000);
+      }
+    }
+    const inactive: Bus = activeRef.current === "A" ? "B" : "A";
+    const inactiveEl = getBus(inactive);
+    if (inactiveEl?.src && Number.isFinite(inactiveEl.currentTime)) {
+      return Math.round(inactiveEl.currentTime * 1000);
+    }
+    return readPlaybackMs();
+  }, [readPlaybackMs]);
+
   const syncPlaybackClock = useCallback(() => {
     const ms = readPlaybackMs();
     playbackStoreRef.current.setSnapshot(ms);
     lyricsPlaybackStoreRef.current.setSnapshot(readLyricsPlaybackMs());
+    outgoingPlaybackStoreRef.current.setSnapshot(readOutgoingPlaybackMs());
     setPlaybackMs(ms);
     const el = getBus(activeRef.current);
     if (!el) return;
@@ -347,12 +365,13 @@ export function useAudioEngine() {
     if (ctx?.state === "suspended") {
       void ctx.resume();
     }
-  }, [readPlaybackMs, readLyricsPlaybackMs]);
+  }, [readPlaybackMs, readLyricsPlaybackMs, readOutgoingPlaybackMs]);
 
   const alignPlaybackClock = useCallback(
     (ms: number) => {
       playbackStoreRef.current.forceSnapshot(ms);
       lyricsPlaybackStoreRef.current.forceSnapshot(ms);
+      outgoingPlaybackStoreRef.current.forceSnapshot(ms);
       setPlaybackMs(ms);
     },
     [],
@@ -1025,6 +1044,7 @@ export function useAudioEngine() {
     isCrossfading,
     playbackMs,
     playbackStore: playbackStoreRef.current as PlaybackStore,
+    outgoingPlaybackStore: outgoingPlaybackStoreRef.current as PlaybackStore,
     lyricsPlaybackStore: lyricsPlaybackStoreRef.current as PlaybackStore,
     durationMs,
     volume,

@@ -52,14 +52,14 @@ describe("resolvePadLyricsDisplay", () => {
     });
   });
 
-  it("hides lyrics while the next track is loading", () => {
+  it("keeps previous lyrics while the next track is loading", () => {
     const result = resolvePadLyricsDisplay(
       prevDisplay,
       { track_id: "track-b", start_ms: 45_000 },
       loadingTrackLyrics,
     );
 
-    expect(result).toBeNull();
+    expect(result).toEqual(prevDisplay);
   });
 
   it("clears lyrics when the current track finished loading without synced subtitles", () => {
