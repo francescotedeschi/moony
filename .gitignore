@@ -22,6 +22,16 @@ frontend/playwright/.cache/
 # Catalog with real data (user-provided MOSS output)
 catalog/catalog.json
 catalog/logs/
+catalog/lyrics_audit_report.json
+catalog/analysis_v16/
+catalog/catalog_V15.json
+catalog/catalog_V16*.json
+catalog/catalog_V17_old.json
+
+# Secrets / local artifacts
+cyanite_secret.*
+logs/
+*.tsbuildinfo
 
 # Pipeline temp audio
 pipeline/data/previews/

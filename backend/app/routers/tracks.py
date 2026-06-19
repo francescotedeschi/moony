@@ -1,7 +1,12 @@
 from fastapi import APIRouter, HTTPException
 
+from app.catalog.energy import (
+    energy_preview_curve,
+    energy_sample_at_sec,
+    energy_summary,
+    track_has_energy_curve,
+)
 from app.catalog.loader import catalog_store
-from app.catalog.motion import motion_for_track, motion_preview_curve, motion_summary
 from app.matching.motion_match import best_target_entry_on_track, effective_segment_label
 from app.models.api import TargetEntryRequest, TargetEntryResponse
 
@@ -34,8 +39,7 @@ def _track_detail_payload(track) -> dict:
         "duration_sec": _duration_sec(track),
         "duration_ms": duration_ms,
         "audio_url": track.audio_url,
-        "has_motion": track.has_motion,
-        **motion_summary(track.motion),
+        **energy_summary(track),
         "segments": [
             {
                 "t_start": s.t_start,
@@ -47,39 +51,44 @@ def _track_detail_payload(track) -> dict:
             for idx, s in enumerate(segments)
         ],
     }
-    if track.has_motion and track.motion:
-        payload["motion"] = track.motion.model_dump()
+    if track_has_energy_curve(track):
+        payload["energy_curve"] = list(track.energy_curve)
+        payload["energy_curve_timestamps_ms"] = list(track.energy_curve_timestamps_ms)
     return payload
 
 
 @router.get("/tracks/{track_id}")
 async def get_track(track_id: str) -> dict:
-    """Track detail: macro segments + optional precomputed motion timeline."""
+    """Track detail: macro segments + optional Cyanite energy curve."""
     return _track_detail_payload(_get_track_or_404(track_id))
 
 
-@router.get("/tracks/{track_id}/motion/preview")
-async def get_track_motion_preview(track_id: str) -> list[dict]:
-    """Downsampled motion curve for timeline UI overlay."""
+@router.get("/tracks/{track_id}/energy/preview")
+async def get_track_energy_preview(track_id: str) -> list[dict]:
+    """Downsampled Cyanite energy curve for timeline UI."""
     track = _get_track_or_404(track_id)
     duration_ms = int(_duration_sec(track) * 1000) or max(
         (s.t_end for s in track.segments), default=0
     )
-    return motion_preview_curve(track.motion, duration_ms=duration_ms)
+    return energy_preview_curve(track, duration_ms=duration_ms)
 
 
-@router.get("/tracks/{track_id}/motion")
-async def get_track_motion(track_id: str) -> dict:
-    """Motion timeline only (large payload)."""
+@router.get("/tracks/{track_id}/energy")
+async def get_track_energy(track_id: str) -> dict:
+    """Full Cyanite energy curve (values + millisecond timestamps)."""
     track = _get_track_or_404(track_id)
-    if not track.has_motion or not track.motion:
-        raise HTTPException(status_code=404, detail="Track has no precomputed motion")
-    return track.motion.model_dump()
+    if not track_has_energy_curve(track):
+        raise HTTPException(status_code=404, detail="Track has no Cyanite energy curve")
+    return {
+        "track_id": track.id,
+        "energy_curve": list(track.energy_curve),
+        "energy_curve_timestamps_ms": list(track.energy_curve_timestamps_ms),
+    }
 
 
 @router.post("/tracks/{track_id}/target-entry", response_model=TargetEntryResponse)
 async def resolve_target_entry(track_id: str, body: TargetEntryRequest) -> TargetEntryResponse:
-    """Closest motion frame to the user pad target (optionally only after playhead)."""
+    """Closest segment entry to the user pad target (optionally only after playhead)."""
     track = _get_track_or_404(track_id)
     after_t_sec = body.after_t_ms / 1000.0 if body.after_t_ms is not None else None
     start_ms, entry_va, idx = best_target_entry_on_track(
@@ -101,20 +110,16 @@ async def resolve_target_entry(track_id: str, body: TargetEntryRequest) -> Targe
     )
 
 
-@router.get("/tracks/{track_id}/motion/at")
-async def get_motion_at(track_id: str, t_sec: float = 0.0, interpolated: bool = True) -> dict:
-    """Lookup motion state at playback time (uses fallback when motion absent)."""
+@router.get("/tracks/{track_id}/energy/at")
+async def get_energy_at(track_id: str, t_sec: float = 0.0) -> dict:
+    """Cyanite energy + section V/A at playback time."""
     track = _get_track_or_404(track_id)
-    sample = motion_for_track(
-        motion=track.motion,
-        segments=track.segments,
-        duration_sec=_duration_sec(track),
-        t_sec=t_sec,
-        interpolated=interpolated,
-    )
+    sample = energy_sample_at_sec(track, t_sec)
     return {
         "track_id": track.id,
-        "has_motion": track.has_motion,
-        "interpolated": interpolated,
-        **sample.__dict__,
+        "has_energy_curve": track_has_energy_curve(track),
+        "t_sec": sample.t_sec,
+        "energy": sample.energy,
+        "valence": sample.valence,
+        "arousal": sample.arousal,
     }

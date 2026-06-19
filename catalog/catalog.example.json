@@ -1,58 +1,70 @@
 {
+  "version": "1.7",
+  "catalog_schema": "moodpad-catalog-musicathon",
+  "catalog_name": "Jamendo (Musixmatch)",
+  "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
   "tracks": [
     {
       "id": "jamendo_example_1",
       "title": "Morning Light",
       "artist": "Example Artist",
+      "duration_sec": 180.0,
       "bpm": 72,
-      "audio_url": "https://mp3l.jamendo.com/?trackid=example",
-      "jamendo_tags": ["calm", "melancholic"],
+      "jamendo": {
+        "track_id": 1,
+        "audio_url": "https://mp3l.jamendo.com/?trackid=example",
+        "tags": ["calm", "ambient"]
+      },
       "musixmatch": {
         "commontrack_id": "12345678",
         "track_id": "274345545",
         "has_subtitles": 1,
-        "has_lyrics": 1
+        "has_lyrics": 1,
+        "lyrics_trusted": true
       },
-      "beat_grid": {
-        "offset_ms": 120,
-        "bar_ms": 2000
-      },
-      "segments": [
-        { "t_start": 0, "t_end": 45000, "v": 0.7, "ar": -0.6, "label": "intro", "bar_count": 8 },
-        { "t_start": 45000, "t_end": 90000, "v": 0.5, "ar": 0.1, "label": "verse", "bar_count": 8 },
-        { "t_start": 90000, "t_end": 130000, "v": -0.3, "ar": 0.85, "label": "chorus", "bar_count": 8 }
+      "sections": [
+        {
+          "start_sec": 0.0,
+          "end_sec": 30.0,
+          "structure_label": "intro",
+          "description": "soft pads, sparse vocals",
+          "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+          "embedding": [],
+          "cyanite_mood_tag": "chilled",
+          "cyanite_mood_score": 0.72,
+          "cyanite_valence": 0.2,
+          "cyanite_arousal": -0.4
+        },
+        {
+          "start_sec": 30.0,
+          "end_sec": 90.0,
+          "structure_label": "verse",
+          "description": "intimate vocal, light percussion",
+          "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+          "embedding": [],
+          "cyanite_mood_tag": "happy",
+          "cyanite_mood_score": 0.65,
+          "cyanite_valence": 0.5,
+          "cyanite_arousal": 0.1
+        },
+        {
+          "start_sec": 90.0,
+          "end_sec": 150.0,
+          "structure_label": "chorus",
+          "description": "fuller arrangement, uplifting hook",
+          "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+          "embedding": [],
+          "cyanite_mood_tag": "energetic",
+          "cyanite_mood_score": 0.58,
+          "cyanite_valence": 0.4,
+          "cyanite_arousal": 0.6
+        }
       ],
-      "transitions": [
-        { "from_seg": 0, "to_seg": 1, "dv": -0.2, "dar": 0.7 },
-        { "from_seg": 1, "to_seg": 2, "dv": -0.8, "dar": 0.75 }
-      ],
-      "mood_distribution": [0.333333, 0.333333, 0.0, 0.333333, 0.0]
-    },
-    {
-      "id": "jamendo_example_2",
-      "title": "Street Heat",
-      "artist": "Urban Pulse",
-      "bpm": 110,
-      "audio_url": "https://mp3l.jamendo.com/?trackid=example2",
-      "jamendo_tags": ["energetic", "electronic"],
-      "musixmatch": {
-        "commontrack_id": "87654321",
-        "track_id": "274345546",
-        "has_subtitles": 1,
-        "has_lyrics": 1
-      },
-      "beat_grid": {
-        "offset_ms": 0,
-        "bar_ms": 2182
-      },
-      "segments": [
-        { "t_start": 0, "t_end": 30000, "v": 0.2, "ar": 0.4, "label": "intro", "bar_count": 4 },
-        { "t_start": 30000, "t_end": 75000, "v": -0.3, "ar": 0.85, "label": "chorus", "bar_count": 16 }
-      ],
-      "transitions": [
-        { "from_seg": 0, "to_seg": 1, "dv": -0.5, "dar": 0.45 }
-      ],
-      "mood_distribution": [0.0, 0.0, 0.5, 0.5, 0.0]
+      "cyanite": {
+        "status": "done",
+        "segment_timestamps_sec": [15.0, 30.0, 45.0, 60.0, 75.0, 90.0],
+        "energy_curve": [0.2, 0.35, 0.5, 0.55, 0.7, 0.8]
+      }
     }
   ]
 }

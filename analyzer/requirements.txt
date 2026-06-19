@@ -1,0 +1,12 @@
+# Runtime deps for moony/analyzer (offline pipeline)
+httpx>=0.28.0
+pydantic>=2.10.0
+python-dotenv>=1.0.0
+numpy>=1.26.0
+librosa>=0.10.0
+
+# Optional: real MiniLM embeddings (falls back to stub-hash without it)
+sentence-transformers>=3.0.0
+
+# Optional: MOSS via Transformers (GPU)
+# torch, transformers — install in MOSS venv separately

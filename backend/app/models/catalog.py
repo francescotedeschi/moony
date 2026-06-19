@@ -96,6 +96,14 @@ class Track(BaseModel):
         return self
 
     @property
+    def has_energy_curve(self) -> bool:
+        return (
+            len(self.energy_curve) >= 2
+            and len(self.energy_curve_timestamps_ms) >= 2
+            and len(self.energy_curve) == len(self.energy_curve_timestamps_ms)
+        )
+
+    @property
     def has_motion(self) -> bool:
         return self.motion is not None and len(self.motion.energy) > 0
 

@@ -1925,7 +1925,7 @@ export default function App() {
       const track = nowPlayingRef.current;
       if (!track) return;
       try {
-        const at = await api.motionAt(
+        const at = await api.energyAt(
           track.track_id,
           playbackMsRef.current / 1000,
           sessionAbortRef.current?.signal,

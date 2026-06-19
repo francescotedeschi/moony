@@ -1,71 +1,135 @@
-# Pipeline (offline)
+# Pipeline catalog V17
 
-Scripts for building `catalog/catalog.json` from Jamendo + MOSS + Musixmatch match IDs.
+Script offline per produrre `catalog/catalog_V17.json`: il formato che il player carica a runtime.
 
-**Musicathon rule:** do not persist Musixmatch lyrics/subtitles in the catalog.
+**Regola Musicathon:** i testi Musixmatch si usano solo in analisi (LRC sincronizzato). Non vanno mai scritti nel catalogo — solo ID e flag.
 
-## Flow
+## Flusso
 
 ```
-Jamendo sample
-  → Musixmatch match (IDs + flags only)
-  → download preview (temp)
-  → MOSS-Music analysis        → segments, transitions, V/A
-  → enrich_metrics.py (TODO)   → bpm, beat_grid from same preview
-  → write catalog.json
-  → delete preview file
+Jamendo + Musixmatch IDs     → catalogo scheletro (metadata, nessuna analisi)
+MP3 locali                   → ALL_AUDIO_DIR/{jamendo_id}.mp3
+song_analysis.py             → sections MOSS + Cyanite mood/energy
+Verifica Musixmatch          → has_synced_subtitles, lyrics_trusted
+validate_catalog.py          → controllo pre-deploy
 ```
 
-## Catalog v1.7 (Musixmatch-only, MOSS pending)
+## Schema output (per track)
 
-`catalog/catalog_V17.json` — 421 Jamendo tracks with Musixmatch IDs, no segments/motion.
-Rebuild from the working catalog:
+Il player legge solo questi campi. Tutto il resto viene ignorato o ricalcolato in backend.
+
+**Track:** `id`, `title`, `artist`, `duration_sec`, `bpm`, `jamendo`, `musixmatch`, `sections`, `cyanite`
+
+**Section:** `start_sec`, `end_sec`, `structure_label`, `description`, `embedding`, `embedding_model`, `cyanite_mood_tag`, `cyanite_mood_score`, `cyanite_mood_scores`, `cyanite_valence`, `cyanite_arousal`
+
+**Cyanite (track):** `energy_curve`, `segment_timestamps_sec`, `status`
+
+| Fonte | Campi |
+|-------|-------|
+| Jamendo | metadata, `audio_url` |
+| Musixmatch | `track_id`, `commontrack_id`, flag lyrics/subtitles, `lyrics_trusted` |
+| MOSS | struttura, `description`, `embedding` |
+| Cyanite | mood/V-A per section, `energy_curve` |
+
+Mood ed energia in playback arrivano da **Cyanite**. MOSS non fornisce più coordinate V/A.
+
+## 1. Catalogo scheletro
+
+Due modi per ottenere un catalogo con brani Jamendo e match Musixmatch, senza sections:
+
+**Da catalogo esistente** (tiene solo brani già matchati):
 
 ```bash
 python3 pipeline/build_catalog_v17.py
 ```
 
-Expand with more Jamendo↔Musixmatch matches:
+**Espansione** (cerca nuovi brani vocali su Jamendo e pre-match Musixmatch):
 
 ```bash
 python3 pipeline/expand_catalog_jamendo.py --target 200
-python3 pipeline/match_musixmatch.py catalog/catalog.json
+python3 pipeline/match_musixmatch.py catalog/catalog_V17.json
 ```
 
-## Your MOSS output
+Output: `catalog/catalog_V17.json`
 
-Place your extracted JSON as `catalog/catalog.json` (gitignored) or merge into the schema in `catalog.example.json`.
+## 2. Audio locale
 
-Required fields per track:
+Ogni brano analizzato richiede il file:
 
-- `id`, `title`, `artist`, `bpm`, `audio_url`
-- `musixmatch`: `{ commontrack_id, track_id, has_subtitles, has_lyrics }` — **no lyrics text**
-- `segments[]`, `transitions[]`
-- optional `beat_grid`: `{ offset_ms, bar_ms }`
+```
+$ALL_AUDIO_DIR/{jamendo_id}.mp3
+```
 
-## Staging previews
+Esempio: `data/all_audio/1036435.mp3` per `jamendo_1036435`.
 
-Optional: `pipeline/data/previews/` (gitignored) to re-run `enrich_metrics` without re-downloading.
+## 3. Analisi (`song_analysis.py`)
 
-## Validate before deploy
+Entry point unico. Per ogni brano:
 
-Check V/A ranges, placeholder `(0, 0)` segments, and transition deltas:
+1. **Struttura** — hybrid di default (tagli MOSS + label da lyrics LLM)
+2. **MOSS** — caption per section → `description`
+3. **Embedding** — MiniLM dalla description
+4. **Cyanite** — mood tag, V/A per section, `energy_curve` a livello track
+
+Dipende dal package in-repo ``analyzer/`` (stesso repository).
 
 ```bash
-python3 pipeline/validate_catalog.py
-# or
-python3 pipeline/validate_catalog.py catalog/catalog.json --verbose
+# Un brano
+python3 pipeline/song_analysis.py \
+  --catalog catalog/catalog_V17.json \
+  --track-id jamendo_1036435
+
+# Batch completo
+python3 pipeline/song_analysis.py \
+  --catalog catalog/catalog_V17.json \
+  --output catalog/catalog_V17.json
+
+# Solo MOSS (senza API Cyanite)
+python3 pipeline/song_analysis.py \
+  --catalog catalog/catalog_V17.json \
+  --limit 10 \
+  --skip-cyanite
+
+# Solo Cyanite (sections già presenti)
+python3 pipeline/song_analysis.py \
+  --catalog catalog/catalog_V17.json \
+  --cyanite-only
+```
+
+Opzioni utili: `--structure-source hybrid|moss|lyrics-llm`, `--force`, `--no-resume`.
+
+## 4. Verifica Musixmatch
+
+Prima del deploy, il backend esclude i brani con `lyrics_trusted: false`.
+
+```bash
+# Flag LRC sincronizzato (live API)
+python3 pipeline/verify_musixmatch_subtitles.py
+
+# Audit trust (metadata mismatch, testi gospel su pop, ecc.)
+python3 pipeline/audit_musixmatch_lyrics.py --apply
+```
+
+## 5. Validazione pre-deploy
+
+```bash
+python3 pipeline/validate_catalog.py catalog/catalog_V17.json
 make validate-catalog
 ```
 
-Expected ranges (MoodPad / Moony convention, **not** official MOSS):
+Controlla range V/A Cyanite, sections vuote o invalide, copertura minima per il matching.
 
-| Field | Range |
-|-------|-------|
-| `valence` / `v`, `arousal` / `ar` | **[-1, 1]** |
-| `dv` / `dar` (transitions) | **[-1, 1]** |
+## Variabili d'ambiente
 
-- **ERROR** — value outside range (blocks deploy; exit code 1)
-- **WARN** — segment with `(0, 0)` placeholder (MOSS did not return coordinates)
+| Variabile | Uso |
+|-----------|-----|
+| `ALL_AUDIO_DIR` | Cartella MP3 locali |
+| `MUSIXMATCH_API_KEY` | Match ID + fetch LRC runtime |
+| `MOSS_BACKEND`, `MOSS_SGLANG_BASE_URL` oppure `MOSS_MUSIC_REPO` + `MOSS_MODEL_PATH` | Analisi MOSS (GPU) |
+| `OPENAI_API_KEY` o `LYRICS_LLM_API_KEY` | Struttura hybrid / lyrics-llm |
+| `V17_STRUCTURE_SOURCE` | Default `hybrid` |
+| `EMBEDDING_MODEL` | Default `sentence-transformers/all-MiniLM-L6-v2` |
+| `CYANITE_ACCESS_TOKEN` | Mood + energy curve |
+| `CYANITE_CACHE_DIR` | Cache analisi Cyanite |
 
-Use `--strict` to fail on warnings too.
+Copia `.env` nella root del progetto o definisci le variabili elencate sopra.

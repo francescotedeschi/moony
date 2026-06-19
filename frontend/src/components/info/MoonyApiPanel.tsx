@@ -30,7 +30,7 @@ const TRACK_DATA: ApiItem[] = [
   "artist": "Ra00",
   "bpm": 136,
   "duration_ms": 313000,
-  "has_motion": true,
+  "has_energy_curve": true,
   "segments": [
     { "t_start": 0, "t_end": 45000, "v": 0.2, "ar": -0.5, "label": "intro" }
   ]
@@ -40,7 +40,7 @@ const TRACK_DATA: ApiItem[] = [
     id: "timeline",
     method: "GET",
     path: "/tracks/{id}/timeline",
-    summary: "MOSS segment map for timelines: mood, V/A, descriptions, motion preview.",
+    summary: "MOSS segment map for timelines: mood, V/A, descriptions, Cyanite energy curve.",
     example: `GET /tracks/jamendo_1007926/timeline
 
 {
@@ -59,32 +59,32 @@ const TRACK_DATA: ApiItem[] = [
       "emotion_label": "calm"
     }
   ],
-  "motion_preview": [{ "t_ms": 0, "y": 0.42 }]
+  "energy_curve": [0.18, 0.45, 0.30],
+  "energy_curve_timestamps_ms": [0, 15000, 30000]
 }`,
   },
   {
-    id: "motion",
+    id: "energy",
     method: "GET",
-    path: "/tracks/{id}/motion",
+    path: "/tracks/{id}/energy",
     summary:
-      "Precomputed motion timeline and playback lookup: full curve, preview, or value at time.",
-    example: `# Full timeline
-GET /tracks/jamendo_1007926/motion
+      "Cyanite energy curve and playback lookup: full curve, preview, or value at time.",
+    example: `# Full curve
+GET /tracks/jamendo_1007926/energy
 
 # Downsampled curve for UI
-GET /tracks/jamendo_1007926/motion/preview
+GET /tracks/jamendo_1007926/energy/preview
 
 # Lookup at playback time (seconds)
-GET /tracks/jamendo_1007926/motion/at?t_sec=42.5
+GET /tracks/jamendo_1007926/energy/at?t_sec=42.5
 
 {
   "track_id": "jamendo_1007926",
+  "has_energy_curve": true,
   "t_sec": 42.5,
   "energy": 0.61,
-  "vocal": 0.28,
   "valence": 0.35,
-  "arousal": 0.72,
-  "mood": 0.54
+  "arousal": 0.72
 }`,
   },
 ];

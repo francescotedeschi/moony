@@ -416,16 +416,16 @@ def _from_moodpad_export(data: dict[str, Any], version: str = "1.2") -> Catalog:
             )
         )
 
-    with_motion = sum(1 for t in tracks if t.has_motion)
+    with_energy = sum(1 for t in tracks if t.has_energy_curve)
     if excluded_untrusted:
         logger.warning(
             "Excluded %d tracks with untrusted Musixmatch lyrics",
             excluded_untrusted,
         )
     logger.info(
-        "Normalized %d tracks from MoodPad catalog (version=%s, with_motion=%d)",
+        "Normalized %d tracks from MoodPad catalog (version=%s, with_energy=%d)",
         len(tracks),
         version,
-        with_motion,
+        with_energy,
     )
     return Catalog(tracks=tracks)

@@ -98,8 +98,8 @@ export type CatalogStats = {
   mood_segment_counts: number[];
   mood_segment_share: number[];
   dominant_mood_track_counts: number[];
-  with_motion?: number;
-  motion_coverage?: number;
+  with_energy?: number;
+  energy_coverage?: number;
   with_loudness?: number;
   loudness_coverage?: number;
   with_musixmatch?: number;
@@ -128,16 +128,13 @@ export type TrackTimeline = {
   segments: MossSegment[];
 };
 
-export type MotionAtResponse = {
+export type EnergyAtResponse = {
   track_id: string;
-  has_motion: boolean;
-  interpolated: boolean;
+  has_energy_curve: boolean;
   t_sec: number;
   energy: number;
-  vocal: number;
   valence: number;
   arousal: number;
-  mood: number;
 };
 
 export type MatchResponse = {
@@ -281,8 +278,8 @@ export const api = {
       signal,
     }),
   trackTimeline: (trackId: string, signal?: AbortSignal) => fetchTimeline(trackId, signal),
-  motionAt: (trackId: string, tSec: number, signal?: AbortSignal) =>
-    request<MotionAtResponse>(`/tracks/${trackId}/motion/at?t_sec=${tSec}`, { signal }),
+  energyAt: (trackId: string, tSec: number, signal?: AbortSignal) =>
+    request<EnergyAtResponse>(`/tracks/${trackId}/energy/at?t_sec=${tSec}`, { signal }),
   resolveTargetEntry: (trackId: string, target: VA, afterTMs?: number) =>
     request<{ track_id: string; start_ms: number; segment: MatchResponse["segment"] }>(
       `/tracks/${trackId}/target-entry`,
