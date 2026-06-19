@@ -2,12 +2,7 @@ import { formatCatalogMood, moodColorForName, moodColorForVa, nearestEmotionZone
 import type { MossSegment, TrackTimeline } from "../lib/api";
 
 export function segmentHasInspectData(seg: MossSegment): boolean {
-  return Boolean(
-    seg.description?.trim() ||
-      seg.moss_emotion_label?.trim() ||
-      seg.essentia_emotion_label?.trim() ||
-      seg.cyanite_mood_tag?.trim(),
-  );
+  return Boolean(seg.description?.trim() || seg.cyanite_mood_tag?.trim());
 }
 
 export function segmentCyaniteMoodLabel(seg: MossSegment): string | null {
@@ -177,10 +172,9 @@ export function isTimelineBarReady(timeline: TrackTimeline | null | undefined): 
   return !isPrefetchTimelineStub(timeline);
 }
 
-/** Background enrich: full segments and optional motion overlay. */
+/** Background enrich: wait until full MOSS segments replace prefetch stubs. */
 export function needsTimelineEnrich(timeline: TrackTimeline | null | undefined): boolean {
-  if (!isTimelineBarReady(timeline)) return true;
-  return !timeline!.motion_preview || timeline!.motion_preview.length < 2;
+  return !isTimelineBarReady(timeline);
 }
 
 /** Same rules as backend ``segment_entry_eligible`` (not first segment; start ≤ 40% duration). */

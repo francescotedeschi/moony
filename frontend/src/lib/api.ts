@@ -23,33 +23,11 @@ export function trackAudioUrl(trackId: string): string {
   return `${base}/tracks/${trackId}/audio`;
 }
 
-async function fetchTimelineWithMotion(
+async function fetchTimeline(
   trackId: string,
   signal?: AbortSignal,
-  opts?: { motionPreview?: boolean },
 ): Promise<TrackTimeline> {
-  const timeline = await request<TrackTimeline>(`/tracks/${trackId}/timeline`, { signal });
-  if (opts?.motionPreview === false) {
-    return timeline;
-  }
-  if (timeline.motion_preview && timeline.motion_preview.length >= 2) {
-    return timeline;
-  }
-  if (timeline.has_motion) {
-    try {
-      const previewSignal = signal ?? AbortSignal.timeout(8_000);
-      const motion_preview = await request<MotionPreviewPoint[]>(
-        `/tracks/${trackId}/motion/preview`,
-        { signal: previewSignal },
-      );
-      if (motion_preview.length >= 2) {
-        return { ...timeline, motion_preview, has_motion: true };
-      }
-    } catch {
-      /* Return segment timeline even when motion preview is slow or unavailable */
-    }
-  }
-  return timeline;
+  return request<TrackTimeline>(`/tracks/${trackId}/timeline`, { signal });
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -101,8 +79,6 @@ export type MossSegment = {
   label: string;
   emotion_label?: string;
   description?: string;
-  moss_emotion_label?: string;
-  essentia_emotion_label?: string;
   /** Dominant Cyanite mood tag for this section (e.g. dark, happy). */
   cyanite_mood_tag?: string;
   /** Cyanite continuous valence [-1, 1] — null when not analyzed */
@@ -110,8 +86,6 @@ export type MossSegment = {
   /** Cyanite continuous arousal [-1, 1] — null when not analyzed */
   cyanite_ar?: number | null;
 };
-
-export type MotionPreviewPoint = { t_ms: number; y: number };
 
 export type VA = { v: number; ar: number };
 
@@ -146,16 +120,11 @@ export type TrackTimeline = {
   artist: string;
   bpm: number;
   duration_ms: number;
-  has_motion?: boolean;
   musixmatch?: Record<string, unknown> | null;
-  motion_preview?: MotionPreviewPoint[];
   /** Cyanite explicit energy signal [0, 1] per sample. */
   energy_curve?: number[];
   /** Millisecond timestamps aligned 1:1 with energy_curve. */
   energy_curve_timestamps_ms?: number[];
-  /** MOSS motion vocal presence [0, 1] per sample. */
-  vocal_curve?: number[];
-  vocal_curve_timestamps_ms?: number[];
   segments: MossSegment[];
 };
 
@@ -311,13 +280,7 @@ export const api = {
       body: JSON.stringify(body),
       signal,
     }),
-  trackTimeline: (
-    trackId: string,
-    signal?: AbortSignal,
-    opts?: { motionPreview?: boolean },
-  ) => fetchTimelineWithMotion(trackId, signal, opts),
-  motionPreview: (trackId: string) =>
-    request<MotionPreviewPoint[]>(`/tracks/${trackId}/motion/preview`),
+  trackTimeline: (trackId: string, signal?: AbortSignal) => fetchTimeline(trackId, signal),
   motionAt: (trackId: string, tSec: number, signal?: AbortSignal) =>
     request<MotionAtResponse>(`/tracks/${trackId}/motion/at?t_sec=${tSec}`, { signal }),
   resolveTargetEntry: (trackId: string, target: VA, afterTMs?: number) =>

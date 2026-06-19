@@ -166,11 +166,7 @@ function SegmentRow({
             }
           />
         ))}
-        <MotionCurveOverlay
-          points={timeline.motion_preview}
-          durationMs={effectiveDurationMs}
-          cyPoints={cyPoints}
-        />
+        <MotionCurveOverlay durationMs={effectiveDurationMs} cyPoints={cyPoints} />
         </div>
         {playheadMs !== undefined && effectiveDurationMs > 0 ? (
           <div

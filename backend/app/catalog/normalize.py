@@ -62,30 +62,14 @@ _CYANITE_TAG_TO_LABEL: dict[str, str] = {
     "ethereal":  "chilled",   # low arousal, slightly positive
 }
 
-# Legacy MOSS emotion labels → nearest new zone label
-_MOSS_TO_LABEL: dict[str, str] = {
-    "calm":    "chilled",
-    "joy":     "happy",
-    "energy":  "energetic",
-    "tension": "tense",
-    "sad":     "sad",
-}
-
 
 def _resolve_emotion_label(raw: dict) -> str:
-    """Priority: cyanite_mood_tag > MOSS emotion_label > moss_emotion_label."""
+    """Canonical pad mood from Cyanite section tag (7-zone remap)."""
     cy_tag = str(raw.get("cyanite_mood_tag") or "").strip().lower()
-    if cy_tag:
-        mapped = _CYANITE_TAG_TO_LABEL.get(cy_tag)
-        if mapped:
-            return mapped
-
-    for field in ("emotion_label", "moss_emotion_label"):
-        raw_label = str(raw.get(field) or "").strip().lower()
-        if raw_label:
-            return _MOSS_TO_LABEL.get(raw_label, raw_label)
-
-    return ""
+    if not cy_tag:
+        return ""
+    mapped = _CYANITE_TAG_TO_LABEL.get(cy_tag)
+    return mapped or cy_tag
 
 # Maps catalog primary_emotion → Valence / Arousal (8 fetch buckets)
 EMOTION_VA: dict[str, tuple[float, float]] = {
@@ -147,18 +131,6 @@ def _normalize_segments(
             continue
 
         label = raw_section_label(raw)
-        v = float(raw.get("valence", raw.get("v", 0.0)))
-        ar = float(raw.get("arousal", raw.get("ar", 0.0)))
-        if abs(v) < 1e-6 and abs(ar) < 1e-6:
-            seg_emotion = str(raw.get("emotion_label") or "").strip().lower()
-            if seg_emotion in PAD_EMOTION_VA:
-                v, ar = PAD_EMOTION_VA[seg_emotion]
-                ar = ar + LABEL_AROUSAL_NUDGE.get(label, 0.0)
-            else:
-                v, ar = base_v, base_ar + LABEL_AROUSAL_NUDGE.get(label, 0.0)
-
-        emb = raw.get("embedding")
-        embedding = [float(x) for x in emb] if isinstance(emb, list) else []
 
         raw_cy_v = raw.get("cyanite_valence")
         raw_cy_ar = raw.get("cyanite_arousal")
@@ -168,6 +140,22 @@ def _normalize_segments(
             cyanite_v = max(-1.0, min(1.0, cyanite_v))
         if cyanite_ar is not None:
             cyanite_ar = max(-1.0, min(1.0, cyanite_ar))
+
+        if cyanite_v is not None and cyanite_ar is not None:
+            v, ar = cyanite_v, cyanite_ar
+        else:
+            v = float(raw.get("valence", raw.get("v", 0.0)))
+            ar = float(raw.get("arousal", raw.get("ar", 0.0)))
+            if abs(v) < 1e-6 and abs(ar) < 1e-6:
+                seg_emotion = _resolve_emotion_label(raw)
+                if seg_emotion in PAD_EMOTION_VA:
+                    v, ar = PAD_EMOTION_VA[seg_emotion]
+                    ar = ar + LABEL_AROUSAL_NUDGE.get(label, 0.0)
+                else:
+                    v, ar = base_v, base_ar + LABEL_AROUSAL_NUDGE.get(label, 0.0)
+
+        emb = raw.get("embedding")
+        embedding = [float(x) for x in emb] if isinstance(emb, list) else []
 
         raw_mood_scores = raw.get("cyanite_mood_scores")
         mood_scores: dict[str, float] = (
@@ -180,9 +168,6 @@ def _normalize_segments(
         cy_tag = str(raw.get("cyanite_mood_tag") or "").strip().lower()
 
         emotion_label = _resolve_emotion_label(raw)
-        if not emotion_label:
-            # Final fallback: derive from V/A via PAD_EMOTION_VA lookup handled upstream
-            emotion_label = str(raw.get("emotion_label") or raw.get("moss_emotion_label") or "").strip().lower()
 
         normalized.append(
             Segment(
@@ -193,8 +178,6 @@ def _normalize_segments(
                 label=label,
                 emotion_label=emotion_label,
                 description=str(raw.get("description") or "").strip(),
-                moss_emotion_label=str(raw.get("moss_emotion_label") or "").strip().lower(),
-                essentia_emotion_label=str(raw.get("essentia_emotion_label") or "").strip().lower(),
                 embedding=embedding,
                 cyanite_v=cyanite_v,
                 cyanite_ar=cyanite_ar,

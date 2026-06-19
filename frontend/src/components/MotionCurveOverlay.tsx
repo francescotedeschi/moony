@@ -1,7 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
 
-import type { MotionPreviewPoint } from "../lib/api";
-
 /** A single control-point for the Cyanite energy spline. */
 export type CySegmentPoint = {
   /** Sample timestamp in milliseconds. */
@@ -11,9 +9,7 @@ export type CySegmentPoint = {
 };
 
 type Props = {
-  points?: MotionPreviewPoint[];
   durationMs: number;
-  /** Cyanite arousal sampled at segment midpoints — drawn as a second spline. */
   cyPoints?: CySegmentPoint[];
 };
 
@@ -23,12 +19,6 @@ type Props = {
 
 type Pt = { x: number; y: number };
 
-/**
- * Draw a Catmull-Rom spline through `pts` onto `ctx`.
- * Uses ghost boundary points so the curve passes through every data point.
- * When `xBounds` is set, ghost x is pinned to the track edges so the spline
- * does not overshoot past the rounded timeline ends.
- */
 function drawCatmullRom(
   ctx: CanvasRenderingContext2D,
   pts: Pt[],
@@ -55,7 +45,6 @@ function drawCatmullRom(
   ctx.moveTo(pts[0].x, pts[0].y);
 
   for (let i = 1; i < p.length - 2; i++) {
-    // Catmull-Rom → Cubic Bezier conversion (tension = 1/6)
     const cp1x = p[i].x + (p[i + 1].x - p[i - 1].x) / 6;
     const cp1y = p[i].y + (p[i + 1].y - p[i - 1].y) / 6;
     const cp2x = p[i + 1].x - (p[i + 2].x - p[i].x) / 6;
@@ -64,19 +53,13 @@ function drawCatmullRom(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
-export function MotionCurveOverlay({ points, durationMs, cyPoints }: Props) {
+export function MotionCurveOverlay({ durationMs, cyPoints }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const hasMoss = (points?.length ?? 0) >= 2;
   const hasCy = (cyPoints?.length ?? 0) >= 2;
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || durationMs <= 0 || (!hasMoss && !hasCy)) return;
+    if (!canvas || durationMs <= 0 || !hasCy) return;
 
     const draw = () => {
       const rect = canvas.getBoundingClientRect();
@@ -93,7 +76,6 @@ export function MotionCurveOverlay({ points, durationMs, cyPoints }: Props) {
 
       ctx.clearRect(0, 0, w, h);
 
-      // Clip to pill shape so curves (and their glow) stay inside rounded ends.
       ctx.save();
       ctx.beginPath();
       ctx.roundRect(0, 0, w, h, h / 2);
@@ -102,33 +84,7 @@ export function MotionCurveOverlay({ points, durationMs, cyPoints }: Props) {
       const padY = h * 0.18;
       const innerH = h - padY * 2;
 
-      // ── MOSS motion curve (existing, straight line-to segments) ──────────
-      if (hasMoss && points) {
-        ctx.beginPath();
-        points.forEach((p, i) => {
-          const x = (p.t_ms / durationMs) * w;
-          const y = padY + (1 - p.y) * innerH;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-
-        const grad = ctx.createLinearGradient(0, 0, w, 0);
-        grad.addColorStop(0, "rgba(167, 139, 250, 0.25)");
-        grad.addColorStop(0.45, "rgba(255, 255, 255, 0.92)");
-        grad.addColorStop(1, "rgba(124, 108, 255, 0.25)");
-
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = Math.max(1.2, 1.65 * dpr);
-        ctx.lineJoin = "round";
-        ctx.lineCap = "round";
-        ctx.shadowColor = "rgba(167, 139, 250, 0.45)";
-        ctx.shadowBlur = 5 * dpr;
-        ctx.stroke();
-      }
-
-      // ── Cyanite energy spline (Catmull-Rom, white) ─────────────────────
       if (hasCy && cyPoints) {
-        // energy ∈ [0, 1] → y (top = high energy)
         const pts: Pt[] = cyPoints.map((p) => ({
           x: (p.t_ms / durationMs) * w,
           y: padY + (1 - p.energy) * innerH,
@@ -161,9 +117,9 @@ export function MotionCurveOverlay({ points, durationMs, cyPoints }: Props) {
     const ro = new ResizeObserver(draw);
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [points, durationMs, cyPoints, hasMoss, hasCy]);
+  }, [durationMs, cyPoints, hasCy]);
 
-  if (!hasMoss && !hasCy) return null;
+  if (!hasCy) return null;
 
   return (
     <canvas

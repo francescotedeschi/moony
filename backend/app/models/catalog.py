@@ -30,8 +30,6 @@ class Segment(BaseModel):
     label: str = "unknown"
     emotion_label: str = ""
     description: str = ""
-    moss_emotion_label: str = ""
-    essentia_emotion_label: str = ""
     embedding: list[float] = Field(default_factory=list)
     bar_count: int | None = None
     cyanite_v: float | None = None

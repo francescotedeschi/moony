@@ -91,9 +91,7 @@ def reembed_sections(
         batch = rows[i : i + batch_size]
         for _track, section, track_bpm in batch:
             embedding, model_id = build_segment_embedding(
-                emotion_label=str(
-                    section.get("emotion_label") or section.get("moss_emotion_label") or "neutral"
-                ),
+                emotion_label=str(section.get("cyanite_mood_tag") or "neutral"),
                 structure_label=raw_section_label(section, fallback="section"),
                 description=section_description(section),
                 bpm=track_bpm,

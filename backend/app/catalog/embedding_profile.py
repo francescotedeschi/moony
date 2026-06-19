@@ -10,7 +10,7 @@ EMBEDDING_PROFILE = "structure+bpm+description"
 
 
 def section_description(raw: dict[str, Any]) -> str:
-    return str(raw.get("description") or raw.get("moss_mood_text") or "").strip()
+    return str(raw.get("description") or "").strip()
 
 
 def section_mood_confidence(raw: dict[str, Any]) -> float:

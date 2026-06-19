@@ -35,10 +35,8 @@ const enrichedTimeline: TrackTimeline = {
     { t_start: 0, t_end: 30_000, v: 0.5, ar: 0.5, label: "verse" },
     { t_start: 30_000, t_end: 60_000, v: 0.2, ar: 0.1, label: "outro" },
   ],
-  motion_preview: [
-    { t_ms: 0, y: 0.4 },
-    { t_ms: 30_000, y: 0.5 },
-  ],
+  energy_curve: [0.2, 0.5, 0.4],
+  energy_curve_timestamps_ms: [0, 30_000, 60_000],
 };
 
 describe("segment inspect metadata", () => {
@@ -71,27 +69,35 @@ describe("timeline display readiness", () => {
     expect(needsTimelineEnrich(prefetchStub)).toBe(true);
   });
 
-  it("shows multi-segment timelines even without motion preview", () => {
+  it("shows multi-segment timelines without extra enrich", () => {
     const segmentsOnly: TrackTimeline = {
       ...stubTimeline,
       segments: enrichedTimeline.segments,
     };
     expect(isTimelineBarReady(segmentsOnly)).toBe(true);
-    expect(needsTimelineEnrich(segmentsOnly)).toBe(true);
+    expect(needsTimelineEnrich(segmentsOnly)).toBe(false);
   });
 
-  it("accepts enriched timelines with motion preview", () => {
+  it("accepts timelines with Cyanite energy curve", () => {
     expect(isTimelineBarReady(enrichedTimeline)).toBe(true);
     expect(needsTimelineEnrich(enrichedTimeline)).toBe(false);
   });
 });
 
 describe("needsTimelineEnrich (legacy stub checks)", () => {
-  it("treats single-segment stubs as not display-ready", () => {
-    expect(needsTimelineEnrich(stubTimeline)).toBe(true);
+  it("treats prefetch stubs as needing enrich", () => {
+    const prefetchStub: TrackTimeline = {
+      track_id: "a",
+      title: "A",
+      artist: "B",
+      bpm: 120,
+      duration_ms: 90_000,
+      segments: [{ t_start: 10_000, t_end: 30_000, v: 0, ar: 0, label: "verse" }],
+    };
+    expect(needsTimelineEnrich(prefetchStub)).toBe(true);
   });
 
-  it("accepts multi-segment timelines with motion preview", () => {
+  it("accepts multi-segment timelines", () => {
     expect(needsTimelineEnrich(enrichedTimeline)).toBe(false);
   });
 });

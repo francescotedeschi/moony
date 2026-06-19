@@ -52,6 +52,5 @@ def test_resolve_track_bpm_falls_back_to_estimate():
     assert resolve_track_bpm(track, estimate_bpm=_estimate_bpm) == 120
 
 
-def test_section_description_prefers_moss_mood_text():
-    assert section_description({"moss_mood_text": "spacious"}) == "spacious"
+def test_section_description_uses_description():
     assert section_description({"description": "Voice: instrumental"}) == "Voice: instrumental"

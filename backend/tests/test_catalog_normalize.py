@@ -41,7 +41,7 @@ def test_normalize_moodpad_v12_sample():
 
 
 def test_normalize_moodpad_v17_sections():
-    """v1.7 export uses ``sections`` and ``structure_label`` (no legacy ``label``)."""
+    """v1.7 export uses ``sections`` and Cyanite mood tags."""
     sample = {
         "catalog_schema": "moodpad-catalog-musicathon",
         "version": "1.7",
@@ -51,7 +51,6 @@ def test_normalize_moodpad_v17_sections():
                 "title": "FLIGHT",
                 "artist": "Sweet Play",
                 "duration_sec": 30.0,
-                "primary_emotion": "calm",
                 "jamendo": {
                     "audio_url": "https://example.com/track.mp3",
                     "tags": ["peaceful"],
@@ -61,19 +60,18 @@ def test_normalize_moodpad_v17_sections():
                         "start_sec": 0.0,
                         "end_sec": 10.0,
                         "structure_label": "intro",
-                        "emotion_label": "calm",
-                        "valence": 0.0,
-                        "arousal": 0.0,
-                        "moss_emotion_label": "calm",
+                        "cyanite_mood_tag": "calm",
+                        "cyanite_valence": 0.29,
+                        "cyanite_arousal": -0.18,
                         "description": "Voice: instrumental",
                     },
                     {
                         "start_sec": 10.0,
                         "end_sec": 30.0,
                         "structure_label": "chorus",
-                        "emotion_label": "joy",
-                        "valence": 0.8,
-                        "arousal": 0.6,
+                        "cyanite_mood_tag": "happy",
+                        "cyanite_valence": 0.65,
+                        "cyanite_arousal": 0.25,
                     },
                 ],
             }
@@ -83,10 +81,11 @@ def test_normalize_moodpad_v17_sections():
     t = cat.tracks[0]
     assert len(t.segments) == 2
     assert t.segments[0].label == "intro"
-    assert t.segments[0].emotion_label == "chilled"   # calm → chilled (7-zone remap)
-    assert t.segments[0].moss_emotion_label == "calm"
+    assert t.segments[0].emotion_label == "chilled"
+    assert t.segments[0].v == 0.29
+    assert t.segments[0].ar == -0.18
     assert t.segments[1].label == "chorus"
-    assert t.segments[1].v == 0.8
+    assert t.segments[1].v == 0.65
 
 
 def test_energy_curve_extended_to_track_bounds():

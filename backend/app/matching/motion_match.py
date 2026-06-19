@@ -154,10 +154,9 @@ _LEGACY_LABEL_REMAP: dict[str, str] = {
 
 
 def effective_segment_emotion_label(seg: Segment) -> str:
-    for field in (seg.emotion_label, seg.moss_emotion_label):
-        lab = (field or "").strip().lower()
-        if lab:
-            return _LEGACY_LABEL_REMAP.get(lab, lab)
+    lab = (seg.emotion_label or "").strip().lower()
+    if lab:
+        return _LEGACY_LABEL_REMAP.get(lab, lab)
     return emotion_label_for_va(VA(v=seg.v, ar=seg.ar))
 
 

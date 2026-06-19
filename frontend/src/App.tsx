@@ -519,7 +519,7 @@ export default function App() {
       const key = matchRowKey(emotion, trackId);
       if (enrichedRowsRef.current.has(key)) return;
       try {
-        const row = await api.trackTimeline(trackId, signal, { motionPreview: true });
+        const row = await api.trackTimeline(trackId, signal);
         if (signal?.aborted) return;
         enrichedRowsRef.current.add(key);
         setMatchRows((prev) =>
@@ -536,7 +536,7 @@ export default function App() {
     [],
   );
 
-  /** Load full catalog timelines for prefetch rows (all segments, motion preview). */
+  /** Load full catalog timelines for prefetch rows (all segments). */
   const loadFullMatchRows = useCallback(
     async (rows: MatchTimelineRow[], signal?: AbortSignal): Promise<MatchTimelineRow[]> => {
       return Promise.all(
@@ -546,9 +546,7 @@ export default function App() {
             return row;
           }
           try {
-            const timeline = await api.trackTimeline(row.track_id, signal, {
-              motionPreview: true,
-            });
+            const timeline = await api.trackTimeline(row.track_id, signal);
             if (signal?.aborted) return row;
             enrichedRowsRef.current.add(key);
             return { ...timeline, emotion: row.emotion, entryMs: row.entryMs };
@@ -602,19 +600,8 @@ export default function App() {
 
     void (async () => {
       try {
-        // Phase 1: all MOSS segments immediately (do not wait on motion preview).
-        const segmentsTimeline = await api.trackTimeline(trackId, undefined, {
-          motionPreview: false,
-        });
-        applyIfCurrent(segmentsTimeline);
-
-        if (!needsTimelineEnrich(segmentsTimeline)) return;
-
-        // Phase 2: motion curve overlay when available.
-        const enriched = await api.trackTimeline(trackId, undefined, {
-          motionPreview: true,
-        });
-        applyIfCurrent(enriched);
+        const timeline = await api.trackTimeline(trackId);
+        applyIfCurrent(timeline);
       } catch (e) {
         if (isAbortError(e)) return;
         if (seq !== timelineLoadSeqRef.current) return;
@@ -1802,16 +1789,16 @@ export default function App() {
     void (async () => {
       const trackId = nowPlaying.track_id;
       const currentView = currentTimeline ?? stubTimelineFromMatch(nowPlaying);
-      const currentNeedsMotion = needsTimelineEnrich(currentView);
+      const currentNeedsEnrich = needsTimelineEnrich(currentView);
       const currentNeedsSegments = needsHandoffTimeline(currentView);
       const rowsNeedingEnrich = matchRows.filter(needsTimelineEnrich);
-      if (!currentNeedsMotion && !currentNeedsSegments && rowsNeedingEnrich.length === 0) {
+      if (!currentNeedsEnrich && !currentNeedsSegments && rowsNeedingEnrich.length === 0) {
         return;
       }
 
       try {
-        if (currentNeedsMotion || currentNeedsSegments) {
-          const full = await api.trackTimeline(trackId, signal, { motionPreview: true });
+        if (currentNeedsEnrich || currentNeedsSegments) {
+          const full = await api.trackTimeline(trackId, signal);
           if (!signal.aborted && nowPlayingRef.current?.track_id === trackId) {
             setCurrentTimeline(full);
           }
@@ -2205,8 +2192,6 @@ export default function App() {
               loading={false}
               enabled={audio.hasTrack}
               syncPlayback={padLyricsSyncPlayback}
-              vocalCurve={currentTimeline?.vocal_curve}
-              vocalCurveTimestampsMs={currentTimeline?.vocal_curve_timestamps_ms}
             />
           ) : null}
           {!nowPlaying ? (
