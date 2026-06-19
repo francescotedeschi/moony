@@ -647,6 +647,51 @@ body {
   }
 }
 
+/*
+ * Explicitly restore desktop transitions so they cannot be overridden by any
+ * mobile-scoped rule or browser quirk. The mobile media query disables these
+ * transitions with !important; this block is the authoritative declaration for
+ * viewports wider than the mobile breakpoint.
+ */
+@media (min-width: 768px) {
+  .moony-header-brand {
+    transition:
+      top var(--moony-header-motion),
+      left var(--moony-header-motion),
+      transform var(--moony-header-motion);
+    transition-delay: 0s;
+    transition-timing-function: var(--moony-ease-smooth);
+  }
+
+  .moony-header-title {
+    transition:
+      font-size var(--moony-header-motion),
+      line-height var(--moony-header-motion),
+      letter-spacing var(--moony-header-motion);
+    transition-delay: 0s;
+    transition-timing-function: var(--moony-ease-smooth);
+  }
+
+  .moony-header-subtitle {
+    transition:
+      opacity var(--moony-subtitle-hide-duration) var(--moony-ease-soft-out),
+      max-height calc(var(--moony-subtitle-hide-duration) + 0.08s) var(--moony-ease-soft-out),
+      margin-top calc(var(--moony-subtitle-hide-duration) + 0.08s) var(--moony-ease-soft-out),
+      transform var(--moony-subtitle-hide-duration) var(--moony-ease-soft-out),
+      filter var(--moony-subtitle-hide-duration) var(--moony-ease-soft-out);
+    transition-delay: var(--moony-logo-move-delay);
+  }
+
+  .moony-app-shell {
+    transition:
+      padding-top var(--moony-header-motion),
+      gap var(--moony-header-motion),
+      padding-bottom var(--moony-header-motion);
+    transition-delay: 0s;
+    transition-timing-function: var(--moony-ease-smooth);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .moony-header {
     --moony-logo-move-delay: 0s;

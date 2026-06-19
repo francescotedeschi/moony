@@ -2082,10 +2082,8 @@ export default function App() {
 
     syncLandingHeaderCompact();
     window.addEventListener("scroll", syncLandingHeaderCompact, { passive: true });
-    window.addEventListener("resize", syncLandingHeaderCompact, { passive: true });
     return () => {
       window.removeEventListener("scroll", syncLandingHeaderCompact);
-      window.removeEventListener("resize", syncLandingHeaderCompact);
     };
   }, []);
 
