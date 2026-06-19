@@ -67,8 +67,6 @@ class CatalogStore:
                 "generated_at",
                 "analyzer",
                 "embedding_model",
-                "moss_status",
-                "motion_status",
                 "source_catalog_version",
             )
             if k in data

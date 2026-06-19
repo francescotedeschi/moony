@@ -24,11 +24,6 @@ CYANITE_MOOD_TO_PAD: dict[str, str] = {
     "uplifting": "Joy",
 }
 
-CYANITE_VA_SOURCE = "cyanite_segments"
-CYANITE_EMOTION_SOURCE = "cyanite"
-
-
-@dataclass(frozen=True)
 class SectionCyaniteMood:
     emotion_label: str
     valence: float

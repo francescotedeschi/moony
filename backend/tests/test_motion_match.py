@@ -8,7 +8,7 @@ from app.matching.motion_match import (
     seek_direction,
     va_at_track_time,
 )
-from app.models.catalog import Segment, TrackMotion, VA
+from app.models.catalog import VA
 
 
 def _track_with_motion() -> dict:

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLyricsSyncMs } from "../hooks/useLyricsSyncMs";
 import { usePlaybackSnapshot } from "../hooks/usePlaybackSnapshot";
 import type { PlaybackStore } from "../lib/playbackStore";
-import { energyAtTimeMs } from "../lib/energyCurve";
 import {
   activeLineIndex,
   hasSyncedLyrics,
@@ -24,8 +23,6 @@ type Props = {
   syncPlayback?: boolean;
   /** Pad overlay: single active line, full wrap, no scroll trail. */
   variant?: "trail" | "pad";
-  vocalCurve?: number[];
-  vocalCurveTimestampsMs?: number[];
 };
 
 function lineStateClass(idx: number, activeIdx: number): string {
@@ -49,24 +46,14 @@ export function LyricsScroller({
   enabled = true,
   syncPlayback = true,
   variant = "trail",
-  vocalCurve,
-  vocalCurveTimestampsMs,
 }: Props) {
   const synced = useMemo(() => hasSyncedLyrics(source, lines), [source, lines]);
   const currentMs = usePlaybackSnapshot(playbackStore, enabled);
   const syncMs = useLyricsSyncMs(currentMs, trackId, entryMs);
   const prepared = useMemo(() => prepareLyricLines(lines), [lines]);
-  const vocalLevel = useMemo(() => {
-    if (!vocalCurve?.length || !vocalCurveTimestampsMs?.length) return null;
-    return energyAtTimeMs(vocalCurve, vocalCurveTimestampsMs, syncMs);
-  }, [vocalCurve, vocalCurveTimestampsMs, syncMs]);
-  const lyricOpts = useMemo(
-    () => (vocalLevel == null ? undefined : { vocalLevel }),
-    [vocalLevel],
-  );
   const syncedLine = useMemo(
-    () => (syncPlayback ? lyricAtTime(prepared, syncMs, undefined, lyricOpts) : null),
-    [prepared, syncMs, syncPlayback, lyricOpts],
+    () => (syncPlayback ? lyricAtTime(prepared, syncMs) : null),
+    [prepared, syncMs, syncPlayback],
   );
   const computedActiveIdx = useMemo(
     () => activeLineIndex(prepared, syncMs),

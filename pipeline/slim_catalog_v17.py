@@ -54,7 +54,16 @@ TRACK_STRIP_KEYS = frozenset(
     }
 )
 
-HEADER_STRIP_KEYS = frozenset({"motion_status", "moss_status"})
+HEADER_STRIP_KEYS = frozenset({
+    "motion_status",
+    "moss_status",
+    "embedding_profile",
+    "analyzer",
+    "cyanite_status",
+    "fetch_mode",
+    "candidates_per_emotion",
+    "emotion_ids",
+})
 
 JAMENDO_STRIP_KEYS = frozenset({"local_audio_path"})
 

@@ -295,22 +295,6 @@ export function segmentMoodColor(seg: MossSegment, fallbackEmotion?: string): st
   return moodColorForVa(seg.v, seg.ar);
 }
 
-export function motionCurvePath(
-  points: { t_ms: number; y: number }[],
-  durationMs: number,
-): string | null {
-  if (durationMs <= 0 || points.length < 2) return null;
-  const padY = 12;
-  const innerH = 100 - padY * 2;
-  return points
-    .map((p, i) => {
-      const x = (p.t_ms / durationMs) * 100;
-      const y = padY + (1 - p.y) * innerH;
-      return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
-}
-
 export function formatMs(ms: number): string {
   const sec = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(sec / 60);

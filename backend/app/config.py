@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     musixmatch_api_key: str = ""
     jamendo_client_id: str = ""
-    catalog_path: str = "catalog/catalog.json"
+    catalog_path: str = "catalog/catalog_V17.json"
     cors_origins: str = "http://localhost:5173"
     database_url: str = "postgresql+psycopg://moony:moony@localhost:5432/moony"
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate catalog.json before deploy — V/A range, zero placeholders, transition deltas."""
+"""Validate catalog JSON before deploy — V/A range, section coverage, Cyanite fields."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from app.catalog.validate import ValidationReport, validate_catalog  # noqa: E40
 
 
 def _default_catalog_path() -> Path:
-    return ROOT / "catalog" / "catalog.json"
+    return ROOT / "catalog" / "catalog_V17.json"
 
 
 def _print_report(report: ValidationReport, *, verbose: bool) -> None:

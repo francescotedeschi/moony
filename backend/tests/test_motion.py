@@ -155,15 +155,15 @@ def test_normalize_v13_motion():
 
 
 @pytest.mark.skipif(
-    not (Path(__file__).resolve().parents[2] / "catalog" / "catalog.json").is_file(),
-    reason="catalog.json not present",
+    not (Path(__file__).resolve().parents[2] / "catalog" / "catalog_V17.json").is_file(),
+    reason="catalog_V17.json not present",
 )
-def test_live_catalog_motion_import():
-    path = Path(__file__).resolve().parents[2] / "catalog" / "catalog.json"
+def test_live_catalog_energy_import():
+    path = Path(__file__).resolve().parents[2] / "catalog" / "catalog_V17.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     cat = normalize_catalog(data)
-    with_motion = sum(1 for t in cat.tracks if t.has_motion)
-    assert with_motion >= 1
-    t = next(t for t in cat.tracks if t.has_motion)
-    s = motion_at_sec_interpolated(t.motion, 1.0)
-    assert -1.0 <= s.valence <= 1.0
+    with_energy = sum(1 for t in cat.tracks if t.has_energy_curve)
+    assert with_energy >= 1
+    t = next(t for t in cat.tracks if t.has_energy_curve)
+    assert t.energy_curve
+    assert t.energy_curve_timestamps_ms

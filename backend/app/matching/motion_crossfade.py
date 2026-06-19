@@ -1,11 +1,11 @@
-"""Crossfade timing and tempo ramps from motion V/A and energy at transition."""
+"""Crossfade timing and tempo ramps from segment V/A and Cyanite energy."""
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
 
-from app.catalog.motion import motion_at_sec_interpolated
+from app.catalog.energy import energy_sample_at_sec
 from app.matching.beat_align import (
     bar_align_duration_ms,
     bar_ms_for_track,
@@ -48,10 +48,9 @@ def bar_ms(bpm: int, beat_grid: BeatGrid | None = None) -> int:
 
 
 def _energy_at_track_time(track: Track, t_sec: float) -> float | None:
-    if not track.has_motion or not track.motion:
+    if not track.has_energy_curve:
         return None
-    sample = motion_at_sec_interpolated(track.motion, max(0.0, t_sec))
-    return float(sample.energy)
+    return float(energy_sample_at_sec(track, t_sec).energy)
 
 
 def motion_crossfade_plan(
@@ -65,7 +64,7 @@ def motion_crossfade_plan(
     bar_ms_dest: int | None = None,
 ) -> MotionCrossfadePlan:
     """
-    Derive crossfade length and volume curve from motion mood/energy delta.
+    Derive crossfade length and volume curve from mood/energy delta at the transition.
     Tempo ramps stay BPM-synced; small arousal nudges on rate_start.
     """
     rate_start, rate_end = dj_playback_rates(bpm_from, bpm_to)

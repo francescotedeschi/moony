@@ -72,11 +72,8 @@ def slim_track(raw: dict[str, Any]) -> dict[str, Any]:
         "artist": raw.get("artist", ""),
         "duration_sec": raw.get("duration_sec"),
         "bpm": raw.get("bpm"),
-        "primary_emotion": raw.get("primary_emotion", "calm"),
         "jamendo": slim_jamendo(raw.get("jamendo") or {}),
         "musixmatch": slim_musixmatch(raw.get("musixmatch") or {}),
-        "analyzer": "pending-moss",
-        "moss_status": "pending",
     }
     return track
 
@@ -95,9 +92,6 @@ def build_catalog_v17(source: dict[str, Any]) -> dict[str, Any]:
             "generated_at": datetime.now(UTC).isoformat(),
             "source_catalog_version": source.get("version"),
             "source_track_count": len(source.get("tracks", [])),
-            "analyzer": "pending-moss",
-            "moss_status": "pending",
-            "motion_status": "pending",
             "tracks": matched,
         }
     )

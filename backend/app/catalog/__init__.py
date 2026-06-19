@@ -1,6 +1,6 @@
 """
-Catalog loading — MOSS-derived JSON only (no Musixmatch lyrics).
+Catalog loading — MoodPad / Moony catalog JSON (sections + Cyanite mood/energy).
 
-segments[]: macro MOSS waypoints for matching and chapter overview.
-motion.*:   smooth precomputed timeline for runtime UI (see app.catalog.motion).
+sections[]: macro structure for matching and timeline UI.
+energy_curve: Cyanite track-level energy (see app.catalog.energy).
 """

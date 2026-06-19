@@ -1,7 +1,7 @@
 """
 Emotion matching v3 — segment label + motion entry + embedding tie-break.
 
-1. Map pad target → emotion_label (5 zones) + catalog search V/A
+1. Map pad target → emotion_label (7 zones) + catalog search V/A
 2. Blend search target toward motion at upcoming section boundaries on current track
 3. Only tracks/entries inside segments with that emotion_label (upcoming-only on same track)
 4. Entry time = closest motion frame to search target within those segments

@@ -21,7 +21,7 @@ const TRACK_DATA: ApiItem[] = [
     id: "track",
     method: "GET",
     path: "/tracks/{id}",
-    summary: "Track metadata, macro segments, and optional full motion payload.",
+    summary: "Track metadata, sections, and Cyanite energy curve.",
     example: `GET /tracks/jamendo_1007926
 
 {

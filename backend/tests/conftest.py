@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_CATALOG = _REPO_ROOT / "catalog" / "catalog.json"
+_DEFAULT_CATALOG = _REPO_ROOT / "catalog" / "catalog_V17.json"
 
 
 def pytest_configure() -> None:

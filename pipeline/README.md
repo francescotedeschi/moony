@@ -98,6 +98,12 @@ python3 pipeline/song_analysis.py \
 
 Opzioni utili: `--structure-source hybrid|moss|lyrics-llm`, `--force`, `--no-resume`.
 
+Dopo l’analisi, opzionale strip dei campi pipeline in header:
+
+```bash
+python3 pipeline/slim_catalog_v17.py catalog/catalog_V17.json
+```
+
 ## 4. Verifica Musixmatch
 
 Prima del deploy, il backend esclude i brani con `lyrics_trusted: false`.

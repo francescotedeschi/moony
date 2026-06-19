@@ -5,7 +5,6 @@ from app.matching.beat_align import (
     bar_align_duration_ms,
     compute_crossfade_start_ms,
     snap_entry_ms,
-    snap_ms_to_downbeat,
 )
 from app.matching.motion_crossfade import crossfade_plan_between_tracks
 from app.models.catalog import BeatGrid, Segment, Track, VA

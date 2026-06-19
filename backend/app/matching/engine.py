@@ -4,18 +4,8 @@ from __future__ import annotations
 
 from app.matching import core
 from app.matching.embedding_penalties import WeightedEmbedding
-from app.matching.emotions import EMOTION_INTENT_IDS, SAME_MOOD_INTENT, branch_target_va, intent_target_va
-from app.matching.motion_match import (
-    best_target_entry_on_track,
-    dj_playback_rates,
-    effective_match_position,
-    refine_entry_ms,
-    seek_direction,
-    transition_from_stored_or_motion,
-    va_at_segment_entry,
-    va_at_track_time,
-)
-from app.models.catalog import Segment, Track, VA
+from app.matching.emotions import EMOTION_INTENT_IDS
+from app.models.catalog import Track, VA
 
 # Re-export for tests and legacy imports
 find_best_match = core.find_best_match

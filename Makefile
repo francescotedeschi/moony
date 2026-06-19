@@ -1,7 +1,7 @@
 .PHONY: up down build logs api-logs web-logs health shell-api validate-catalog test-e2e smoke-live
 
 validate-catalog:
-	python3 pipeline/validate_catalog.py
+	python3 pipeline/validate_catalog.py catalog/catalog_V17.json
 
 up:
 	docker compose up --build

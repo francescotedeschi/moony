@@ -47,6 +47,8 @@ class ValidationReport:
 
 
 def _segment_va(raw: dict[str, Any]) -> tuple[float | None, float | None]:
+    if raw.get("cyanite_valence") is not None and raw.get("cyanite_arousal") is not None:
+        return float(raw["cyanite_valence"]), float(raw["cyanite_arousal"])
     v_key = "valence" if "valence" in raw else "v" if "v" in raw else None
     ar_key = "arousal" if "arousal" in raw else "ar" if "ar" in raw else None
     v = float(raw[v_key]) if v_key is not None else None
@@ -212,7 +214,7 @@ def validate_catalog(data: dict[str, Any]) -> ValidationReport:
         motion = raw.get("motion")
         if motion is not None and isinstance(motion, dict):
             _validate_motion_block(report, track_id, motion, duration_sec)
-        elif version >= "1.3" and motion is None:
+        elif version >= "1.3" and version < "1.7" and motion is None:
             report.issues.append(
                 Issue(
                     "warn",

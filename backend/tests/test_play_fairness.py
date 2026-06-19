@@ -1,6 +1,5 @@
 """Global play counts bias matching toward underplayed tracks."""
 
-import os
 
 import pytest
 
