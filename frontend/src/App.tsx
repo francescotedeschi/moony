@@ -284,6 +284,15 @@ export default function App() {
       (padLyricsReadyForTrack ||
         (padLyricsHandoff && hasSyncedLyrics(padLyrics.source, padLyrics.lines))),
   );
+  // Catalog flags (has_synced_subtitles) can go stale — Musixmatch may add or
+  // drop subtitles after analysis — so the live fetch is the source of truth.
+  // Only assert NO LRC once a runtime fetch has resolved without synced lyrics.
+  const showNoLrcChip = Boolean(
+    nowPlaying &&
+      lyricsMode === "musixmatch" &&
+      !trackLyrics.loading &&
+      !trackLyrics.available,
+  );
   const padRef = useRef<EmotionPadHandle>(null);
   const dragRef = useRef(false);
   /** Track IDs already started this browser session — each song at most once. */
@@ -2319,6 +2328,15 @@ export default function App() {
                     <span className="track-meta-chip">Global play stats offline</span>
                   )}
                   <span className="track-meta-chip">{nowPlaying.bpm} BPM</span>
+                  {showNoLrcChip ? (
+                    <span
+                      className="track-meta-chip track-meta-chip--no-lrc"
+                      title="No synced Musixmatch lyrics (LRC) for this track"
+                      data-testid="no-lrc-chip"
+                    >
+                      NO LRC
+                    </span>
+                  ) : null}
                   {showSyncedMatches && nowPlaying.emotion_label ? (
                     <span className="track-meta-chip">{nowPlaying.emotion_label}</span>
                   ) : null}
