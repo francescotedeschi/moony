@@ -324,31 +324,57 @@ export function useAudioEngine() {
     return playbackStoreRef.current.getSnapshot();
   }, []);
 
+  /**
+   * Audio output latency in ms. The Web Audio graph (MediaElementSource →
+   * destination) does NOT auto-compensate output latency the way a bare
+   * <audio> element does, so what the user hears lags ``currentTime`` by this
+   * much — especially on first playback and Bluetooth sinks. Subtracting it
+   * from the lyric clock keeps the highlighted line aligned with the audible
+   * vocal instead of running ahead. Clamped to stay within the gate's entry
+   * tolerance (see lyricsSyncGate LYRICS_ENTRY_TOLERANCE_MS).
+   */
+  const audioOutputLatencyMs = useCallback((): number => {
+    const ctx = audioContextRef.current as
+      | (AudioContext & { outputLatency?: number; baseLatency?: number })
+      | null;
+    if (!ctx) return 0;
+    let seconds = 0;
+    if (typeof ctx.outputLatency === "number" && Number.isFinite(ctx.outputLatency)) {
+      seconds += ctx.outputLatency;
+    }
+    if (typeof ctx.baseLatency === "number" && Number.isFinite(ctx.baseLatency)) {
+      seconds += ctx.baseLatency;
+    }
+    return Math.min(400, Math.max(0, Math.round(seconds * 1000)));
+  }, []);
+
   const readLyricsPlaybackMs = useCallback((): number => {
+    const latency = audioOutputLatencyMs();
     if (crossfadeActiveRef.current) {
       const inBus: Bus = activeRef.current === "A" ? "B" : "A";
       const incoming = getBus(inBus);
       if (incoming && Number.isFinite(incoming.currentTime)) {
-        return Math.round(incoming.currentTime * 1000);
+        return Math.max(0, Math.round(incoming.currentTime * 1000) - latency);
       }
     }
-    return readPlaybackMs();
-  }, [readPlaybackMs]);
+    return Math.max(0, readPlaybackMs() - latency);
+  }, [audioOutputLatencyMs, readPlaybackMs]);
 
   const readOutgoingPlaybackMs = useCallback((): number => {
+    const latency = audioOutputLatencyMs();
     if (crossfadeActiveRef.current) {
       const outEl = getBus(activeRef.current);
       if (outEl && Number.isFinite(outEl.currentTime)) {
-        return Math.round(outEl.currentTime * 1000);
+        return Math.max(0, Math.round(outEl.currentTime * 1000) - latency);
       }
     }
     const inactive: Bus = activeRef.current === "A" ? "B" : "A";
     const inactiveEl = getBus(inactive);
     if (inactiveEl?.src && Number.isFinite(inactiveEl.currentTime)) {
-      return Math.round(inactiveEl.currentTime * 1000);
+      return Math.max(0, Math.round(inactiveEl.currentTime * 1000) - latency);
     }
-    return readPlaybackMs();
-  }, [readPlaybackMs]);
+    return Math.max(0, readPlaybackMs() - latency);
+  }, [audioOutputLatencyMs, readPlaybackMs]);
 
   const syncPlaybackClock = useCallback(() => {
     const ms = readPlaybackMs();
